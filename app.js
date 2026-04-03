@@ -322,6 +322,30 @@ function viewCard(cardId) {
   renderPage();
 }
 
+function addGastoNoCartao(cardId) {
+  // Open add transaction modal pre-filled with this card
+  state.editingTxId = null;
+  document.getElementById('modal-add-title').textContent = 'Novo Gasto no Cartão';
+  const delBtn = document.querySelector('#modal-add-transaction .btn-delete');
+  if (delBtn) delBtn.remove();
+  const valorEl = document.getElementById('t-valor');
+  valorEl.value = ''; valorEl.dataset.cents = '';
+  document.getElementById('t-desc').value = '';
+  document.getElementById('t-data').value = new Date().toISOString().split('T')[0];
+  document.getElementById('t-parcelas').value = '1';
+  document.getElementById('t-recorrente').checked = false;
+  document.getElementById('parcela-info').textContent = '';
+  setTransactionType('expense');
+  populateCategorySelect();
+  populateCardSelect();
+  // Pre-select the card
+  const contaSel = document.getElementById('t-conta');
+  if (contaSel) contaSel.value = cardId;
+  // Show parcelas since it's a credit card context
+  document.getElementById('parcelas-group').style.display = 'block';
+  document.getElementById('modal-add-transaction').classList.add('open');
+}
+
 function renderCardDetail() {
   const data = loadData();
   const card = data.cards.find(c => c.id === state.viewingCardId);
@@ -368,8 +392,20 @@ function renderCardDetail() {
     return d < cur;
   });
 
+  // Calculate total of all future faturas (excluding current)
+  const totalFuturo = futureFaturas
+    .filter(g => !(g.month === state.currentMonth && g.year === state.currentYear))
+    .reduce((s, g) => s + g.total, 0);
+
+  // Total comprometido = current + future
+  const totalComprometido = futureFaturas.reduce((s, g) => s + g.total, 0);
+  const limitDispReal = card.limite > 0 ? card.limite - totalComprometido : null;
+
   return `
-    <button onclick="navigate('dashboard')" style="background:none;border:none;color:var(--accent);font-family:var(--font);font-size:14px;cursor:pointer;margin-bottom:16px;padding:0">← Voltar</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <button onclick="navigate('dashboard')" style="background:none;border:none;color:var(--accent);font-family:var(--font);font-size:14px;cursor:pointer;padding:0">← Voltar</button>
+      <button onclick="addGastoNoCartao('${card.id}')" style="background:var(--accent);color:#0f0f0f;border:none;border-radius:var(--radius-sm);padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font)">+ Novo gasto</button>
+    </div>
 
     <div class="balance-card" style="border-color:${card.cor}44;background:${card.cor}11">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
@@ -382,46 +418,81 @@ function renderCardDetail() {
           ${card.vencimento ? `<div style="font-size:11px;color:var(--amber)">Vence dia ${card.vencimento}</div>` : ''}
         </div>
       </div>
-      <div class="balance-label">Fatura atual</div>
-      <div class="balance-value" style="color:${color}">${fmt(curUsed)}</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:${card.limite > 0 ? '12px' : '0'}">
+        <div>
+          <div class="balance-label">Fatura atual</div>
+          <div style="font-size:22px;font-weight:600;font-family:var(--mono);color:${color}">${fmt(curUsed)}</div>
+          ${card.vencimento ? `<div style="font-size:10px;color:var(--amber);margin-top:2px">Vence dia ${card.vencimento}</div>` : ''}
+        </div>
+        ${totalFuturo > 0 ? `<div>
+          <div class="balance-label">Próximas faturas</div>
+          <div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--amber)">${fmt(totalFuturo)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">já comprometido</div>
+        </div>` : '<div></div>'}
+      </div>
+
       ${card.limite > 0 ? `
-        <div style="margin-top:12px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px">
-            <span>Limite usado</span><span>${fmt(curUsed)} / ${fmt(card.limite)}</span>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:4px">
+            <span>Limite comprometido (atual + futuro)</span><span>${fmt(totalComprometido)} / ${fmt(card.limite)}</span>
           </div>
-          <div class="budget-bar"><div class="budget-bar-fill" style="width:${pct}%;background:${color}"></div></div>
-          <div style="font-size:12px;color:var(--text2);margin-top:4px">Disponível: <span style="color:var(--green);font-family:var(--mono)">${fmt(limitDisp)}</span></div>
+          <div class="budget-bar"><div class="budget-bar-fill" style="width:${Math.min(totalComprometido/card.limite*100,100)}%;background:${color}"></div></div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px">
+            <div style="font-size:11px;color:var(--text2)">Disponível real: <span style="color:var(--green);font-family:var(--mono);font-weight:500">${fmt(Math.max(limitDispReal,0))}</span></div>
+            <div style="font-size:11px;color:var(--text2)">Limite: <span style="font-family:var(--mono)">${fmt(card.limite)}</span></div>
+          </div>
         </div>
       ` : ''}
     </div>
 
     ${futureFaturas.length ? `
-      <div class="section-header"><span class="section-title">Faturas futuras</span></div>
-      ${futureFaturas.map(g => renderFaturaGroup(g, card, data, false)).join('')}
+      <div class="section-header"><span class="section-title">Faturas</span></div>
+      ${futureFaturas.map(g => renderFaturaGroup(g, card, data, g.month !== state.currentMonth || g.year !== state.currentYear)).join('')}
     ` : ''}
 
     ${pastFaturas.length ? `
-      <div class="section-header" style="margin-top:16px"><span class="section-title">Faturas anteriores</span></div>
+      <div class="section-header" style="margin-top:8px"><span class="section-title">Faturas anteriores</span></div>
       ${pastFaturas.map(g => renderFaturaGroup(g, card, data, true)).join('')}
     ` : ''}
 
-    ${!sorted.length ? '<div class="empty-state"><div class="empty-state-icon">💳</div>Nenhum gasto neste cartão</div>' : ''}
+    ${!sorted.length ? '<div class="empty-state"><div class="empty-state-icon">💳</div>Nenhum gasto neste cartão<br><button onclick="addGastoNoCartao('${card.id}')" style="margin-top:12px;background:var(--accent);color:#0f0f0f;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font)">+ Adicionar primeiro gasto</button></div>' : ''}
   `;
 }
 
 function renderFaturaGroup(g, card, data, collapsed) {
-  const vencDia = card.vencimento ? ` · Vence dia ${card.vencimento}` : '';
   const id = `fatura_${g.year}_${g.month}`;
+  const today = new Date();
+  const isFuture = new Date(g.year, g.month, 1) > new Date(today.getFullYear(), today.getMonth(), 1);
+  const isCurrent = g.month === today.getMonth() && g.year === today.getFullYear();
+
+  // Close date = fechamento day of the billing month
+  const closeDate = card.fechamento ? `Fecha ${card.fechamento}/${String(g.month+1).padStart(2,'0')}` : '';
+  // Due date = vencimento day of the NEXT month after closing
+  let dueMonth = g.month + 1; let dueYear = g.year;
+  if (dueMonth > 11) { dueMonth = 0; dueYear++; }
+  const dueDate = card.vencimento ? `Vence ${card.vencimento}/${String(dueMonth+1).padStart(2,'0')}/${dueYear}` : '';
+
+  const statusTag = isCurrent
+    ? `<span style="font-size:10px;background:var(--accent-dim);color:var(--accent);padding:2px 7px;border-radius:20px">Atual</span>`
+    : isFuture
+    ? `<span style="font-size:10px;background:var(--amber-dim);color:var(--amber);padding:2px 7px;border-radius:20px">Futura</span>`
+    : `<span style="font-size:10px;background:var(--bg4);color:var(--text3);padding:2px 7px;border-radius:20px">Fechada</span>`;
+
   return `<div class="chart-container" style="margin-bottom:8px">
     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleFatura('${id}')">
-      <div>
-        <div style="font-size:14px;font-weight:500">${MONTHS[g.month]} ${g.year}${vencDia}</div>
-        <div style="font-size:12px;color:var(--text2);font-family:var(--mono)">${fmt(g.total)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="font-size:14px;font-weight:500">${MONTHS[g.month]} ${g.year}</span>
+          ${statusTag}
+        </div>
+        <div style="font-size:18px;font-weight:600;font-family:var(--mono);color:${isCurrent ? 'var(--text)' : isFuture ? 'var(--amber)' : 'var(--text2)'}">${fmt(g.total)}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px">${[closeDate, dueDate].filter(Boolean).join(' · ')}</div>
       </div>
-      <span style="color:var(--text3);font-size:18px" id="arr_${id}">›</span>
+      <span style="color:var(--text3);font-size:18px;margin-left:12px" id="arr_${id}">${collapsed ? '›' : '⌄'}</span>
     </div>
     <div id="${id}" style="display:${collapsed ? 'none' : 'block'};margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
-      ${g.txs.map(t => {
+      ${g.txs.sort((a,b) => new Date(b.data)-new Date(a.data)).map(t => {
         const cat = data.categories.find(c => c.id === t.cat);
         const parcelaTag = t.parcelas > 1 ? `<span class="tx-parcela-badge">${t.parcelaAtual}/${t.parcelas}x</span>` : '';
         return `<div class="tx-item" style="margin-bottom:6px"
@@ -430,7 +501,7 @@ function renderFaturaGroup(g, card, data, collapsed) {
           ontouchstart="startLongPress(event,'${t.id}')"
           ontouchend="cancelLongPress()"
           ontouchmove="cancelLongPress()">
-          <div class="tx-icon" style="background:${cat ? '#ff5c5c22' : 'var(--bg3)'}">${cat ? cat.icon : '📦'}</div>
+          <div class="tx-icon" style="background:${cat ? '#ff5c5c22' : 'var(--bg3)'};width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">${cat ? cat.icon : '📦'}</div>
           <div class="tx-info">
             <div class="tx-desc">${t.desc} ${parcelaTag}</div>
             <div class="tx-meta">${cat ? cat.nome : '—'} · ${new Date(t.data+'T12:00:00').toLocaleDateString('pt-BR')}</div>
@@ -438,6 +509,11 @@ function renderFaturaGroup(g, card, data, collapsed) {
           <div class="tx-amount expense">-${fmt(t.valor)}</div>
         </div>`;
       }).join('')}
+      <button onclick="addGastoNoCartao('${card.id}')" style="width:100%;margin-top:6px;padding:10px;background:none;border:1px dashed var(--bg4);border-radius:var(--radius-sm);color:var(--text3);cursor:pointer;font-family:var(--font);font-size:13px;transition:border-color 0.15s,color 0.15s"
+        onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+        onmouseout="this.style.borderColor='var(--bg4)';this.style.color='var(--text3)'">
+        + Adicionar gasto
+      </button>
     </div>
   </div>`;
 }
