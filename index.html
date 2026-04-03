@@ -8,7 +8,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Meu Bolso">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
 <title>Meu Bolso</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,11 +15,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<!-- APP SHELL -->
 <div id="app">
-
-  <!-- HEADER -->
   <header class="header">
     <div class="header-left">
       <span class="app-logo">MB</span>
@@ -30,43 +25,20 @@
       </div>
     </div>
     <div class="header-right">
-      <button class="icon-btn" onclick="changeMonth(-1)" title="Mês anterior">&#8249;</button>
-      <button class="icon-btn" onclick="changeMonth(1)" title="Próximo mês">&#8250;</button>
-      <button class="icon-btn" onclick="showModal('modal-settings')" title="Configurações">⚙</button>
+      <button class="icon-btn" onclick="changeMonth(-1)">&#8249;</button>
+      <button class="icon-btn" onclick="changeMonth(1)">&#8250;</button>
+      <button class="icon-btn" onclick="showModal('modal-settings')">⚙</button>
     </div>
   </header>
-
-  <!-- MAIN CONTENT -->
-  <main class="main" id="main-content">
-    <!-- injected by JS -->
-  </main>
-
-  <!-- BOTTOM NAV -->
+  <main class="main" id="main-content"></main>
   <nav class="bottom-nav">
-    <button class="nav-btn active" onclick="navigate('dashboard')" data-page="dashboard">
-      <span class="nav-icon">◈</span>
-      <span>Início</span>
-    </button>
-    <button class="nav-btn" onclick="navigate('transactions')" data-page="transactions">
-      <span class="nav-icon">↕</span>
-      <span>Transações</span>
-    </button>
-    <button class="nav-btn nav-add" onclick="showModal('modal-add-transaction')">
-      <span class="nav-icon-add">+</span>
-    </button>
-    <button class="nav-btn" onclick="navigate('reports')" data-page="reports">
-      <span class="nav-icon">◎</span>
-      <span>Relatórios</span>
-    </button>
-    <button class="nav-btn" onclick="navigate('goals')" data-page="goals">
-      <span class="nav-icon">◉</span>
-      <span>Metas</span>
-    </button>
+    <button class="nav-btn active" onclick="navigate('dashboard')" data-page="dashboard"><span class="nav-icon">◈</span><span>Início</span></button>
+    <button class="nav-btn" onclick="navigate('transactions')" data-page="transactions"><span class="nav-icon">↕</span><span>Transações</span></button>
+    <button class="nav-btn nav-add" onclick="showModal('modal-add-transaction')"><span class="nav-icon-add">+</span></button>
+    <button class="nav-btn" onclick="navigate('reports')" data-page="reports"><span class="nav-icon">◎</span><span>Relatórios</span></button>
+    <button class="nav-btn" onclick="navigate('goals')" data-page="goals"><span class="nav-icon">◉</span><span>Metas</span></button>
   </nav>
-
 </div>
-
-<!-- ===== MODALS ===== -->
 
 <!-- ADD TRANSACTION -->
 <div class="modal-overlay" id="modal-add-transaction">
@@ -80,53 +52,28 @@
         <button class="type-btn active" id="type-expense" onclick="setTransactionType('expense')">Gasto</button>
         <button class="type-btn" id="type-income" onclick="setTransactionType('income')">Receita</button>
       </div>
-      <div class="form-group">
-        <label>Descrição</label>
-        <input type="text" id="t-desc" placeholder="Ex: Supermercado, Salário...">
-      </div>
-      <div class="form-group">
-        <label>Valor (R$)</label>
-        <input type="number" id="t-valor" placeholder="0,00" min="0" step="0.01">
-      </div>
+      <div class="form-group"><label>Descrição</label><input type="text" id="t-desc" placeholder="Ex: Supermercado, Salário..."></div>
+      <div class="form-group"><label>Valor</label><input type="text" id="t-valor" inputmode="numeric" placeholder="R$ 0,00"></div>
       <div class="form-row-2">
-        <div class="form-group">
-          <label>Categoria</label>
-          <select id="t-cat"></select>
-        </div>
-        <div class="form-group">
-          <label>Conta / Cartão</label>
-          <select id="t-conta"></select>
-        </div>
+        <div class="form-group"><label>Categoria</label><select id="t-cat"></select></div>
+        <div class="form-group"><label>Conta / Cartão</label><select id="t-conta"></select></div>
       </div>
-      <div class="form-group">
-        <label>Data</label>
-        <input type="date" id="t-data">
-      </div>
+      <div class="form-group"><label>Data</label><input type="date" id="t-data"></div>
       <div class="form-group" id="parcelas-group" style="display:none">
         <label>Parcelado?</label>
         <div class="form-row-2">
           <select id="t-parcelas">
             <option value="1">À vista</option>
-            <option value="2">2x</option>
-            <option value="3">3x</option>
-            <option value="4">4x</option>
-            <option value="5">5x</option>
-            <option value="6">6x</option>
-            <option value="7">7x</option>
-            <option value="8">8x</option>
-            <option value="9">9x</option>
-            <option value="10">10x</option>
-            <option value="11">11x</option>
-            <option value="12">12x</option>
+            <option value="2">2x</option><option value="3">3x</option><option value="4">4x</option>
+            <option value="5">5x</option><option value="6">6x</option><option value="7">7x</option>
+            <option value="8">8x</option><option value="9">9x</option><option value="10">10x</option>
+            <option value="11">11x</option><option value="12">12x</option>
           </select>
           <div class="parcela-info" id="parcela-info"></div>
         </div>
       </div>
       <div class="form-group">
-        <label class="checkbox-label">
-          <input type="checkbox" id="t-recorrente">
-          <span>Lançar todo mês automaticamente</span>
-        </label>
+        <label class="checkbox-label"><input type="checkbox" id="t-recorrente"><span>Lançar todo mês automaticamente</span></label>
       </div>
     </div>
     <div class="modal-footer">
@@ -147,13 +94,9 @@
       <div id="cards-list"></div>
       <hr class="divider">
       <h3 class="sub-title">Adicionar novo</h3>
-      <div class="form-group">
-        <label>Nome</label>
-        <input type="text" id="c-nome" placeholder="Ex: Nubank, Conta Bradesco...">
-      </div>
+      <div class="form-group"><label>Nome</label><input type="text" id="c-nome" placeholder="Ex: Nubank, Conta Bradesco..."></div>
       <div class="form-row-2">
-        <div class="form-group">
-          <label>Tipo</label>
+        <div class="form-group"><label>Tipo</label>
           <select id="c-tipo">
             <option value="conta">Conta corrente</option>
             <option value="credito">Cartão de crédito</option>
@@ -162,15 +105,13 @@
             <option value="poupanca">Poupança</option>
           </select>
         </div>
-        <div class="form-group">
-          <label>Limite (R$)</label>
-          <input type="number" id="c-limite" placeholder="0 = sem limite" min="0" step="0.01">
-        </div>
+        <div class="form-group"><label>Limite (R$)</label><input type="text" id="c-limite" inputmode="numeric" placeholder="R$ 0,00"></div>
       </div>
-      <div class="form-group">
-        <label>Cor</label>
-        <div class="color-picker" id="color-picker"></div>
+      <div class="form-row-2">
+        <div class="form-group"><label>Dia de fechamento</label><input type="number" id="c-fechamento" placeholder="Ex: 10" min="1" max="31"></div>
+        <div class="form-group"><label>Dia de vencimento</label><input type="number" id="c-vencimento" placeholder="Ex: 5" min="1" max="31"></div>
       </div>
+      <div class="form-group"><label>Cor</label><div class="color-picker" id="color-picker"></div></div>
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" onclick="hideModal('modal-cards')">Fechar</button>
@@ -189,14 +130,10 @@
     <div class="modal-body">
       <div id="categories-list"></div>
       <hr class="divider">
-      <h3 class="sub-title">Adicionar categoria</h3>
+      <h3 class="sub-title">Adicionar / editar categoria</h3>
       <div class="form-row-2">
-        <div class="form-group">
-          <label>Nome</label>
-          <input type="text" id="cat-nome" placeholder="Ex: Pet, Investimentos...">
-        </div>
-        <div class="form-group">
-          <label>Tipo</label>
+        <div class="form-group"><label>Nome</label><input type="text" id="cat-nome" placeholder="Ex: Pet, Academia..."></div>
+        <div class="form-group"><label>Tipo</label>
           <select id="cat-tipo">
             <option value="expense">Gasto</option>
             <option value="income">Receita</option>
@@ -204,20 +141,14 @@
           </select>
         </div>
       </div>
+      <div class="form-group"><label>Ícone</label><div class="emoji-picker" id="emoji-picker"></div></div>
       <div class="form-group">
-        <label>Ícone</label>
-        <div class="emoji-picker" id="emoji-picker"></div>
-      </div>
-      <div class="form-group">
-        <label class="checkbox-label">
-          <input type="checkbox" id="cat-recorrente">
-          <span>Recorrente por padrão</span>
-        </label>
+        <label class="checkbox-label"><input type="checkbox" id="cat-recorrente"><span>Recorrente por padrão</span></label>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" onclick="hideModal('modal-categories')">Fechar</button>
-      <button class="btn-primary" onclick="saveCategory()">Adicionar</button>
+      <button class="btn-primary" id="cat-save-btn" onclick="saveCategory()">Adicionar</button>
     </div>
   </div>
 </div>
@@ -251,26 +182,10 @@
         <button class="type-btn active" id="goal-type-monthly" onclick="setGoalType('monthly')">Mensal</button>
         <button class="type-btn" id="goal-type-total" onclick="setGoalType('total')">Total</button>
       </div>
-      <div class="form-group">
-        <label>Nome da meta</label>
-        <input type="text" id="g-nome" placeholder="Ex: Viagem para Europa, Reserva de emergência...">
-      </div>
-      <div class="form-group">
-        <label id="g-valor-label">Valor mensal a economizar (R$)</label>
-        <input type="number" id="g-valor" placeholder="0,00" min="0" step="0.01">
-      </div>
-      <div class="form-group" id="g-total-group" style="display:none">
-        <label>Valor total a atingir (R$)</label>
-        <input type="number" id="g-total" placeholder="0,00" min="0" step="0.01">
-      </div>
-      <div class="form-group" id="g-atual-group" style="display:none">
-        <label>Já tenho guardado (R$)</label>
-        <input type="number" id="g-atual" placeholder="0,00" min="0" step="0.01">
-      </div>
-      <div class="form-group">
-        <label>Ícone</label>
-        <div class="emoji-picker" id="goal-emoji-picker"></div>
-      </div>
+      <div class="form-group"><label>Nome da meta</label><input type="text" id="g-nome" placeholder="Ex: Viagem, Reserva de emergência..."></div>
+      <div class="form-group"><label id="g-valor-label">Valor mensal a economizar</label><input type="text" id="g-valor" inputmode="numeric" placeholder="R$ 0,00"></div>
+      <div class="form-group" id="g-total-group" style="display:none"><label>Valor total a atingir</label><input type="text" id="g-total" inputmode="numeric" placeholder="R$ 0,00"></div>
+      <div class="form-group"><label>Ícone</label><div class="emoji-picker" id="goal-emoji-picker"></div></div>
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" onclick="hideModal('modal-add-goal')">Cancelar</button>
@@ -288,30 +203,18 @@
     </div>
     <div class="modal-body">
       <div class="settings-list">
-        <button class="settings-item" onclick="hideModal('modal-settings');showModal('modal-cards')">
-          <span>💳</span><span>Cartões e Contas</span><span class="settings-arrow">›</span>
-        </button>
-        <button class="settings-item" onclick="hideModal('modal-settings');showModal('modal-categories')">
-          <span>🏷️</span><span>Categorias</span><span class="settings-arrow">›</span>
-        </button>
-        <button class="settings-item" onclick="hideModal('modal-settings');showModal('modal-budget')">
-          <span>📊</span><span>Orçamento Mensal</span><span class="settings-arrow">›</span>
-        </button>
-        <button class="settings-item" onclick="hideModal('modal-settings');navigate('goals')">
-          <span>🎯</span><span>Metas</span><span class="settings-arrow">›</span>
-        </button>
+        <button class="settings-item" onclick="hideModal('modal-settings');showModal('modal-cards')"><span>💳</span><span>Cartões e Contas</span><span class="settings-arrow">›</span></button>
+        <button class="settings-item" onclick="hideModal('modal-settings');showModal('modal-categories')"><span>🏷️</span><span>Categorias</span><span class="settings-arrow">›</span></button>
+        <button class="settings-item" onclick="hideModal('modal-settings');showModal('modal-budget')"><span>📊</span><span>Orçamento Mensal</span><span class="settings-arrow">›</span></button>
+        <button class="settings-item" onclick="hideModal('modal-settings');navigate('goals')"><span>🎯</span><span>Metas</span><span class="settings-arrow">›</span></button>
         <hr class="divider">
-        <button class="settings-item danger" onclick="confirmClearData()">
-          <span>🗑️</span><span>Limpar todos os dados</span><span class="settings-arrow">›</span>
-        </button>
+        <button class="settings-item danger" onclick="confirmClearData()"><span>🗑️</span><span>Limpar todos os dados</span><span class="settings-arrow">›</span></button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- TOAST -->
 <div class="toast" id="toast"></div>
-
 <script src="app.js"></script>
 </body>
 </html>
