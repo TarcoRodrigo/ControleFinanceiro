@@ -25,6 +25,8 @@ function loadData() {
     budgets: JSON.parse(localStorage.getItem('mb_budgets') || '{}'),
     goals: JSON.parse(localStorage.getItem('mb_goals') || '[]'),
     recurrents: JSON.parse(localStorage.getItem('mb_recurrents') || '[]'),
+    fixos: JSON.parse(localStorage.getItem('mb_fixos') || '[]'),
+    fixos_status: JSON.parse(localStorage.getItem('mb_fixos_status') || '{}'),
   };
 }
 
@@ -71,7 +73,7 @@ function changeMonth(d) {
 
 function updateHeader() {
   document.getElementById('header-month').textContent = MONTHS[state.currentMonth] + ' ' + state.currentYear;
-  const titles = { dashboard: 'Início', transactions: 'Transações', reports: 'Relatórios', goals: 'Metas', card_detail: 'Detalhes do Cartão' };
+  const titles = { dashboard: 'Início', transactions: 'Transações', reports: 'Relatórios', goals: 'Metas', card_detail: 'Detalhes do Cartão', fixos: 'Gastos Fixos' };
   document.getElementById('header-title').textContent = titles[state.currentPage] || 'Meu Bolso';
 }
 
@@ -154,6 +156,7 @@ function renderPage() {
     case 'reports': main.innerHTML = renderReports(); break;
     case 'goals': main.innerHTML = renderGoals(); break;
     case 'card_detail': main.innerHTML = renderCardDetail(); break;
+    case 'fixos': main.innerHTML = renderFixos(); break;
   }
 }
 
@@ -1177,6 +1180,205 @@ function confirmClearData() {
     localStorage.clear();
     toast('Dados apagados!');
     renderPage();
+  }
+}
+
+
+// ===== GASTOS FIXOS =====
+
+function getFixoStatusKey(fixoId, month, year) {
+  return `${fixoId}_${year}_${month}`;
+}
+
+function getFixoStatus(fixoId, month, year) {
+  const data = loadData();
+  const key = getFixoStatusKey(fixoId, month, year);
+  return data.fixos_status[key] || 'pendente';
+}
+
+function setFixoStatus(fixoId, month, year, status) {
+  const data = loadData();
+  const key = getFixoStatusKey(fixoId, month, year);
+  data.fixos_status[key] = status;
+  saveData('fixos_status', data.fixos_status);
+}
+
+function confirmarPagamento(fixoId) {
+  const data = loadData();
+  const fixo = data.fixos.find(f => f.id === fixoId);
+  if (!fixo) return;
+  const month = state.currentMonth;
+  const year = state.currentYear;
+
+  // Add as transaction
+  const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(fixo.dia).padStart(2,'0')}`;
+  data.transactions.push({
+    id: 'tx_fixo_' + fixoId + '_' + year + '_' + month,
+    desc: fixo.nome, valor: fixo.valor, cat: fixo.cat, conta: fixo.conta,
+    tipo: 'expense', data: dateStr,
+    month, year, parcelas: 1, parcelaAtual: 1, isRecurrent: false, isFixo: true,
+  });
+  saveData('transactions', data.transactions);
+  setFixoStatus(fixoId, month, year, 'pago');
+  toast('Pagamento confirmado!');
+  renderPage();
+}
+
+function deleteFixo(id) {
+  const data = loadData();
+  data.fixos = data.fixos.filter(f => f.id !== id);
+  saveData('fixos', data.fixos);
+  renderPage();
+  toast('Gasto fixo removido');
+}
+
+function saveFixo() {
+  const nome = document.getElementById('fx-nome').value.trim();
+  const valor = getCurrencyValue(document.getElementById('fx-valor'));
+  const cat = document.getElementById('fx-cat').value;
+  const conta = document.getElementById('fx-conta').value;
+  const dia = parseInt(document.getElementById('fx-dia').value) || 0;
+  if (!nome || valor <= 0 || !dia) { toast('Preencha todos os campos'); return; }
+
+  const data = loadData();
+  data.fixos.push({
+    id: 'fx_' + Date.now(),
+    nome, valor, cat, conta, dia,
+  });
+  saveData('fixos', data.fixos);
+  hideModal('modal-add-fixo');
+  toast('Gasto fixo adicionado!');
+  renderPage();
+  checkFixosNotifications();
+}
+
+function renderFixos() {
+  const data = loadData();
+  const today = new Date();
+  const todayDay = today.getDate();
+  const month = state.currentMonth;
+  const year = state.currentYear;
+  const isCurrentMonth = month === today.getMonth() && year === today.getFullYear();
+
+  // Compute status for each fixo
+  const withStatus = data.fixos.map(f => {
+    let status = getFixoStatus(f.id, month, year);
+    // Auto-detect atrasado for current month
+    if (status === 'pendente' && isCurrentMonth && todayDay > f.dia) {
+      status = 'atrasado';
+    }
+    return { ...f, status };
+  });
+
+  const totalFixos = data.fixos.reduce((s, f) => s + f.valor, 0);
+  const totalPago = withStatus.filter(f => f.status === 'pago').reduce((s, f) => s + f.valor, 0);
+  const totalPendente = withStatus.filter(f => f.status !== 'pago').reduce((s, f) => s + f.valor, 0);
+
+  const statusLabel = { pendente: 'A vencer', atrasado: 'Atrasado', pago: 'Pago' };
+  const statusColor = { pendente: 'var(--amber)', atrasado: 'var(--red)', pago: 'var(--green)' };
+  const statusBg = { pendente: 'var(--amber-dim)', atrasado: 'var(--red-dim)', pago: 'var(--green-dim)' };
+
+  // Sort: atrasado first, then pendente by dia, then pago
+  const order = { atrasado: 0, pendente: 1, pago: 2 };
+  withStatus.sort((a, b) => order[a.status] - order[b.status] || a.dia - b.dia);
+
+  return `
+    <div class="mini-cards" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="mini-card"><div class="mini-card-label">Total fixos</div><div class="mini-card-value" style="font-size:14px">${fmt(totalFixos)}</div></div>
+      <div class="mini-card"><div class="mini-card-label">Pago</div><div class="mini-card-value income" style="font-size:14px">${fmt(totalPago)}</div></div>
+      <div class="mini-card"><div class="mini-card-label">Pendente</div><div class="mini-card-value expense" style="font-size:14px">${fmt(totalPendente)}</div></div>
+    </div>
+
+    ${withStatus.length === 0 ? `
+      <div class="empty-state"><div class="empty-state-icon">📋</div>Nenhum gasto fixo cadastrado</div>
+    ` : withStatus.map(f => {
+      const cat = data.categories.find(c => c.id === f.cat);
+      const card = data.cards.find(c => c.id === f.conta);
+      const daysUntil = isCurrentMonth ? f.dia - todayDay : null;
+      let alertMsg = '';
+      if (f.status === 'pendente' && daysUntil !== null) {
+        if (daysUntil === 0) alertMsg = `<div style="font-size:11px;color:var(--red);margin-top:4px">⚠ Vence hoje!</div>`;
+        else if (daysUntil > 0 && daysUntil <= 3) alertMsg = `<div style="font-size:11px;color:var(--amber);margin-top:4px">⏰ Vence em ${daysUntil} dia${daysUntil > 1 ? 's' : ''}</div>`;
+      }
+      if (f.status === 'atrasado') alertMsg = `<div style="font-size:11px;color:var(--red);margin-top:4px">⚠ Pagamento atrasado!</div>`;
+
+      return `<div class="fixo-card">
+        <div class="fixo-card-left">
+          <div class="tx-icon" style="background:${cat ? 'var(--red-dim)' : 'var(--bg3)'};width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${cat ? cat.icon : '📦'}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.nome}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">Dia ${f.dia} · ${card ? card.nome : '—'}</div>
+            ${alertMsg}
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+          <div style="font-size:15px;font-weight:500;font-family:var(--mono);color:var(--red)">-${fmt(f.valor)}</div>
+          <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${statusBg[f.status]};color:${statusColor[f.status]};font-weight:500">${statusLabel[f.status]}</span>
+          ${f.status !== 'pago' ? `<button class="btn-confirm-fixo" onclick="confirmarPagamento('${f.id}')">✓ Pago</button>` : `<button class="btn-confirm-fixo" style="color:var(--text3);border-color:var(--bg4)" onclick="desfazerPagamento('${f.id}')">Desfazer</button>`}
+        </div>
+        <button onclick="deleteFixo('${f.id}')" style="position:absolute;top:10px;right:10px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:4px">×</button>
+      </div>`;
+    }).join('')}
+
+    <button class="goal-add-btn" style="margin-top:12px" onclick="openAddFixo()">+ Novo gasto fixo</button>
+  `;
+}
+
+function desfazerPagamento(fixoId) {
+  const data = loadData();
+  // Remove transaction
+  data.transactions = data.transactions.filter(t => t.id !== `tx_fixo_${fixoId}_${state.currentYear}_${state.currentMonth}`);
+  saveData('transactions', data.transactions);
+  setFixoStatus(fixoId, state.currentMonth, state.currentYear, 'pendente');
+  toast('Pagamento desfeito');
+  renderPage();
+}
+
+function openAddFixo() {
+  const data = loadData();
+  // Populate selects
+  const catSel = document.getElementById('fx-cat');
+  catSel.innerHTML = data.categories.filter(c => c.tipo === 'expense' || c.tipo === 'both')
+    .map(c => `<option value="${c.id}">${c.icon} ${c.nome}</option>`).join('');
+  const contaSel = document.getElementById('fx-conta');
+  contaSel.innerHTML = data.cards.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  const fxValor = document.getElementById('fx-valor');
+  fxValor.value = ''; fxValor.dataset.cents = '';
+  setupCurrencyInput(fxValor);
+  document.getElementById('fx-nome').value = '';
+  document.getElementById('fx-dia').value = '';
+  showModal('modal-add-fixo');
+}
+
+// ===== NOTIFICATIONS =====
+function checkFixosNotifications() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'denied') return;
+
+  const run = () => {
+    const data = loadData();
+    const today = new Date();
+    const todayDay = today.getDate();
+    const month = today.getMonth();
+    const year = today.getFullYear();
+
+    data.fixos.forEach(f => {
+      const status = getFixoStatus(f.id, month, year);
+      if (status === 'pago') return;
+      const diff = f.dia - todayDay;
+      let msg = null;
+      if (diff === 0) msg = `"${f.nome}" vence hoje! (${fmt(f.valor)})`;
+      else if (diff > 0 && diff <= 3) msg = `"${f.nome}" vence em ${diff} dia${diff > 1 ? 's' : ''} (${fmt(f.valor)})`;
+      else if (diff < 0) msg = `"${f.nome}" está atrasado! (${fmt(f.valor)})`;
+      if (msg) {
+        new Notification('💸 Meu Bolso — Gasto Fixo', { body: msg, icon: 'icon-192.png' });
+      }
+    });
+  };
+
+  if (Notification.permission === 'granted') { run(); }
+  else {
+    Notification.requestPermission().then(p => { if (p === 'granted') run(); });
   }
 }
 

@@ -35,8 +35,8 @@
     <button class="nav-btn active" onclick="navigate('dashboard')" data-page="dashboard"><span class="nav-icon">◈</span><span>Início</span></button>
     <button class="nav-btn" onclick="navigate('transactions')" data-page="transactions"><span class="nav-icon">↕</span><span>Transações</span></button>
     <button class="nav-btn nav-add" onclick="showModal('modal-add-transaction')"><span class="nav-icon-add">+</span></button>
+    <button class="nav-btn" onclick="navigate('fixos')" data-page="fixos"><span class="nav-icon">📋</span><span>Fixos</span></button>
     <button class="nav-btn" onclick="navigate('reports')" data-page="reports"><span class="nav-icon">◎</span><span>Relatórios</span></button>
-    <button class="nav-btn" onclick="navigate('goals')" data-page="goals"><span class="nav-icon">◉</span><span>Metas</span></button>
   </nav>
 </div>
 
@@ -190,6 +190,30 @@
     <div class="modal-footer">
       <button class="btn-secondary" onclick="hideModal('modal-add-goal')">Cancelar</button>
       <button class="btn-primary" onclick="saveGoal()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD FIXO -->
+<div class="modal-overlay" id="modal-add-fixo">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Novo Gasto Fixo</h2>
+      <button class="modal-close" onclick="hideModal('modal-add-fixo')">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc">Gastos fixos são lançados nos seus gastos apenas após você confirmar o pagamento.</p>
+      <div class="form-group"><label>Nome</label><input type="text" id="fx-nome" placeholder="Ex: Aluguel, Internet, Academia..."></div>
+      <div class="form-group"><label>Valor</label><input type="text" id="fx-valor" inputmode="numeric" placeholder="R$ 0,00"></div>
+      <div class="form-row-2">
+        <div class="form-group"><label>Categoria</label><select id="fx-cat"></select></div>
+        <div class="form-group"><label>Conta / Cartão</label><select id="fx-conta"></select></div>
+      </div>
+      <div class="form-group"><label>Dia de vencimento todo mês</label><input type="number" id="fx-dia" placeholder="Ex: 10" min="1" max="31"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="hideModal('modal-add-fixo')">Cancelar</button>
+      <button class="btn-primary" onclick="saveFixo()">Salvar</button>
     </div>
   </div>
 </div>

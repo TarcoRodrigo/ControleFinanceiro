@@ -515,3 +515,36 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
   background: var(--bg3);
   transform: scale(0.97);
 }
+
+/* ===== GASTOS FIXOS ===== */
+.fixo-card {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+.fixo-card-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.btn-confirm-fixo {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+  cursor: pointer;
+  font-family: var(--font);
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.btn-confirm-fixo:active { background: var(--accent); color: #0f0f0f; }
