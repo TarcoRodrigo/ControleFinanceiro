@@ -680,6 +680,10 @@ function showModal(id) {
     setTransactionType('expense');
     populateCategorySelect();
     populateCardSelect();
+    const parcelasEl = document.getElementById('t-parcelas');
+    if (parcelasEl) parcelasEl.onchange = updateParcelaInfo;
+    const tValorEl = document.getElementById('t-valor');
+    if (tValorEl) tValorEl.oninput = updateParcelaInfo;
   }
   if (id === 'modal-cards') renderCardsList();
   if (id === 'modal-categories') { renderCategoriesList(); renderEmojiPicker('emoji-picker', 'selectedEmoji'); renderColorDots(); }
@@ -741,8 +745,6 @@ function updateParcelaInfo() {
     document.getElementById('parcela-info').textContent = '';
   }
 }
-
-document.getElementById('t-parcelas').addEventListener('change', updateParcelaInfo);
 
 function saveTransaction() {
   const desc = document.getElementById('t-desc').value.trim();
@@ -1467,10 +1469,6 @@ function setFixoTipo(tipo) {
   document.getElementById('fx-parcelas-group').style.display = tipo === 'parcelado' ? 'block' : 'none';
 }
 
-// Polyfill for hidden input radio-like behavior
-document.querySelectorAll && document.querySelectorAll('input[name="fx-tipo"]') && true;
-Object.defineProperty(HTMLInputElement.prototype, 'fxTipoVal', { get() { return document.getElementById('fx-tipo-val')?.value || 'recorrente'; } });
-
 function openAddFixo() {
   const data = loadData();
   const catSel = document.getElementById('fx-cat');
@@ -1550,29 +1548,6 @@ function toast(msg) {
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); }
 
 // ===== INIT =====
-// Setup currency inputs after DOM ready
-document.addEventListener('DOMContentLoaded', () => {
-  setupCurrencyInput(document.getElementById('t-valor'));
-  setupCurrencyInput(document.getElementById('c-limite'));
-  setupCurrencyInput(document.getElementById('g-valor'));
-  setupCurrencyInput(document.getElementById('g-total'));
-  setupCurrencyInput(document.getElementById('g-atual'));
-});
-
 applyRecurrents();
 updateHeader();
 renderPage();
-
-// Setup currency inputs immediately too
-setTimeout(() => {
-  const tValor = document.getElementById('t-valor');
-  const cLimite = document.getElementById('c-limite');
-  const gValor = document.getElementById('g-valor');
-  const gTotal = document.getElementById('g-total');
-  const gAtual = document.getElementById('g-atual');
-  if (tValor) setupCurrencyInput(tValor);
-  if (cLimite) setupCurrencyInput(cLimite);
-  if (gValor) setupCurrencyInput(gValor);
-  if (gTotal) setupCurrencyInput(gTotal);
-  if (gAtual) setupCurrencyInput(gAtual);
-}, 100);
