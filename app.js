@@ -465,7 +465,12 @@ function renderTxItem(t, data) {
   const cardName = card ? card.nome : '—';
   const parcelaTag = t.parcelas > 1 ? `<span class="tx-parcela-badge">${t.parcelaAtual}/${t.parcelas}x</span>` : '';
   const recTag = t.isRecurrent ? `<span class="recorrente-badge">🔁</span>` : '';
-  return `<div class="tx-item" onclick="editTransaction('${t.id}')">
+  return `<div class="tx-item" 
+    onclick="editTransaction('${t.id}')"
+    oncontextmenu="showTxMenu(event,'${t.id}');return false;"
+    ontouchstart="startLongPress(event,'${t.id}')"
+    ontouchend="cancelLongPress()"
+    ontouchmove="cancelLongPress()">
     <div class="tx-icon" style="background:${cat ? getCatColor(cat) + '22' : 'var(--bg3)'}">${icon}</div>
     <div class="tx-info">
       <div class="tx-desc">${t.desc} ${parcelaTag} ${recTag}</div>
@@ -473,6 +478,74 @@ function renderTxItem(t, data) {
     </div>
     <div class="tx-amount ${t.tipo}">${t.tipo === 'income' ? '+' : '-'}${fmt(t.valor)}</div>
   </div>`;
+}
+
+// ===== LONG PRESS CONTEXT MENU =====
+let longPressTimer = null;
+
+function startLongPress(e, txId) {
+  cancelLongPress();
+  longPressTimer = setTimeout(() => {
+    if (navigator.vibrate) navigator.vibrate(40);
+    showTxMenu(e, txId);
+  }, 500);
+}
+
+function cancelLongPress() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}
+
+function showTxMenu(e, txId) {
+  // Remove existing menu
+  const existing = document.getElementById('tx-context-menu');
+  if (existing) existing.remove();
+
+  const data = loadData();
+  const t = data.transactions.find(tx => tx.id === txId);
+  if (!t) return;
+
+  const menu = document.createElement('div');
+  menu.id = 'tx-context-menu';
+  menu.className = 'context-menu';
+  menu.innerHTML = `
+    <div class="context-menu-header">${t.desc}</div>
+    <button class="context-menu-item" onclick="closeTxMenu();editTransaction('${txId}')">
+      <span>✏️</span><span>Editar</span>
+    </button>
+    <button class="context-menu-item danger" onclick="closeTxMenu();confirmDeleteTx('${txId}')">
+      <span>🗑️</span><span>Excluir</span>
+    </button>
+    <button class="context-menu-cancel" onclick="closeTxMenu()">Cancelar</button>
+  `;
+
+  // Backdrop
+  const backdrop = document.createElement('div');
+  backdrop.id = 'tx-context-backdrop';
+  backdrop.className = 'context-backdrop';
+  backdrop.onclick = closeTxMenu;
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(menu);
+
+  // Prevent click from also triggering editTransaction
+  e.preventDefault && e.preventDefault();
+  e.stopPropagation && e.stopPropagation();
+}
+
+function closeTxMenu() {
+  const menu = document.getElementById('tx-context-menu');
+  const backdrop = document.getElementById('tx-context-backdrop');
+  if (menu) menu.remove();
+  if (backdrop) backdrop.remove();
+}
+
+function confirmDeleteTx(id) {
+  const data = loadData();
+  const t = data.transactions.find(tx => tx.id === id);
+  if (!t) return;
+  if (confirm(`Excluir "${t.desc}"?`)) {
+    deleteTransaction(id);
+  }
 }
 
 function getCatColor(cat) {
