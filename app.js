@@ -12,6 +12,7 @@ let state = {
   txFilter: 'all',
   editingTxId: null,
   editingCatId: null,
+  editingCardId: null,
   viewingCardId: null,
 };
 
@@ -508,6 +509,7 @@ function showModal(id) {
 function hideModal(id) {
   document.getElementById(id).classList.remove('open');
   if (id === 'modal-categories') { state.editingCatId = null; }
+  if (id === 'modal-cards') { state.editingCardId = null; resetCardForm(); }
 }
 
 function setTransactionType(type) {
@@ -681,6 +683,18 @@ function renderColorDots() {
 
 function selectColor(c) { state.selectedColor = c; renderColorDots(); }
 
+function resetCardForm() {
+  document.getElementById('c-nome').value = '';
+  const limiteEl = document.getElementById('c-limite');
+  limiteEl.value = '';
+  limiteEl.dataset.cents = '';
+  document.getElementById('c-fechamento').value = '';
+  document.getElementById('c-vencimento').value = '';
+  document.getElementById('c-tipo').value = 'conta';
+  document.getElementById('c-save-btn').textContent = 'Adicionar';
+  state.editingCardId = null;
+}
+
 function saveCard() {
   const nome = document.getElementById('c-nome').value.trim();
   const tipo = document.getElementById('c-tipo').value;
@@ -689,14 +703,37 @@ function saveCard() {
   const vencimento = parseInt(document.getElementById('c-vencimento').value) || 0;
   if (!nome) { toast('Digite um nome'); return; }
   const data = loadData();
-  data.cards.push({ id: 'c_' + Date.now(), nome, tipo, limite, cor: state.selectedColor, fechamento, vencimento });
+  if (state.editingCardId) {
+    const idx = data.cards.findIndex(c => c.id === state.editingCardId);
+    if (idx >= 0) {
+      data.cards[idx] = { ...data.cards[idx], nome, tipo, limite, cor: state.selectedColor, fechamento, vencimento };
+      toast('Cartão atualizado!');
+    }
+    state.editingCardId = null;
+  } else {
+    data.cards.push({ id: 'c_' + Date.now(), nome, tipo, limite, cor: state.selectedColor, fechamento, vencimento });
+    toast('Conta adicionada!');
+  }
   saveData('cards', data.cards);
-  document.getElementById('c-nome').value = '';
-  document.getElementById('c-limite').value = '';
-  document.getElementById('c-fechamento').value = '';
-  document.getElementById('c-vencimento').value = '';
+  resetCardForm();
   renderCardsList();
-  toast('Conta adicionada!');
+}
+
+function editCard(id) {
+  const data = loadData();
+  const c = data.cards.find(c => c.id === id);
+  if (!c) return;
+  state.editingCardId = id;
+  state.selectedColor = c.cor;
+  document.getElementById('c-nome').value = c.nome;
+  document.getElementById('c-tipo').value = c.tipo;
+  setCurrencyValue(document.getElementById('c-limite'), c.limite || 0);
+  document.getElementById('c-fechamento').value = c.fechamento || '';
+  document.getElementById('c-vencimento').value = c.vencimento || '';
+  document.getElementById('c-save-btn').textContent = 'Salvar edição';
+  renderColorDots();
+  // Scroll to form
+  document.querySelector('#modal-cards .modal-body').scrollTo({ top: 999, behavior: 'smooth' });
 }
 
 function renderCardsList() {
@@ -710,6 +747,7 @@ function renderCardsList() {
         <div class="card-list-name">${c.nome}</div>
         <div class="card-list-info">${c.tipo}${c.limite > 0 ? ' · Limite: ' + fmt(c.limite) : ''}${c.fechamento ? ' · Fecha dia ' + c.fechamento : ''}${c.vencimento ? ' · Vence dia ' + c.vencimento : ''}</div>
       </div>
+      <button onclick="editCard('${c.id}')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:14px;padding:0 8px">✏️</button>
       <button class="card-list-del" onclick="deleteCard('${c.id}')">×</button>
     </div>`
   ).join('') || '<div style="color:var(--text3);font-size:13px">Nenhuma conta cadastrada</div>';
