@@ -1210,17 +1210,27 @@ function confirmarPagamento(fixoId) {
   const month = state.currentMonth;
   const year = state.currentYear;
 
-  // Add as transaction
-  const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(fixo.dia).padStart(2,'0')}`;
+  const today = new Date();
+  const todayDay = today.getDate();
+  const isCurrentMonth = month === today.getMonth() && year === today.getFullYear();
+  const isPaidLate = isCurrentMonth && todayDay > fixo.dia;
+
+  // Use today as payment date if late, otherwise use vencimento day
+  const payDay = isPaidLate ? todayDay : fixo.dia;
+  const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(payDay).padStart(2,'0')}`;
+
+  const desc = isPaidLate ? `${fixo.nome} (pago em atraso)` : fixo.nome;
+
   data.transactions.push({
     id: 'tx_fixo_' + fixoId + '_' + year + '_' + month,
-    desc: fixo.nome, valor: fixo.valor, cat: fixo.cat, conta: fixo.conta,
+    desc, valor: fixo.valor, cat: fixo.cat, conta: fixo.conta,
     tipo: 'expense', data: dateStr,
     month, year, parcelas: 1, parcelaAtual: 1, isRecurrent: false, isFixo: true,
+    paidLate: isPaidLate,
   });
   saveData('transactions', data.transactions);
-  setFixoStatus(fixoId, month, year, 'pago');
-  toast('Pagamento confirmado!');
+  setFixoStatus(fixoId, month, year, isPaidLate ? 'pago_atrasado' : 'pago');
+  toast(isPaidLate ? 'Registrado como pago em atraso' : 'Pagamento confirmado!');
   renderPage();
 }
 
@@ -1238,13 +1248,27 @@ function saveFixo() {
   const cat = document.getElementById('fx-cat').value;
   const conta = document.getElementById('fx-conta').value;
   const dia = parseInt(document.getElementById('fx-dia').value) || 0;
+  const tipoFixo = document.getElementById('fx-tipo-val').value || 'recorrente';
   if (!nome || valor <= 0 || !dia) { toast('Preencha todos os campos'); return; }
 
   const data = loadData();
-  data.fixos.push({
-    id: 'fx_' + Date.now(),
-    nome, valor, cat, conta, dia,
-  });
+  const fixo = { id: 'fx_' + Date.now(), nome, valor, cat, conta, dia, tipo: tipoFixo };
+
+  if (tipoFixo === 'parcelado') {
+    const totalParcelas = parseInt(document.getElementById('fx-total-parcelas').value) || 0;
+    const parcelaAtual = parseInt(document.getElementById('fx-parcela-atual').value) || 1;
+    if (!totalParcelas || totalParcelas < parcelaAtual) { toast('Verifique as parcelas'); return; }
+    fixo.totalParcelas = totalParcelas;
+    fixo.parcelaAtual = parcelaAtual;
+    // Calculate start month/year based on current month and parcelaAtual
+    let startMonth = state.currentMonth - (parcelaAtual - 1);
+    let startYear = state.currentYear;
+    while (startMonth < 0) { startMonth += 12; startYear--; }
+    fixo.startMonth = startMonth;
+    fixo.startYear = startYear;
+  }
+
+  data.fixos.push(fixo);
   saveData('fixos', data.fixos);
   hideModal('modal-add-fixo');
   toast('Gasto fixo adicionado!');
@@ -1262,24 +1286,31 @@ function renderFixos() {
 
   // Compute status for each fixo
   const withStatus = data.fixos.map(f => {
+    // Check if parcelado fixo is finished or not yet started
+    if (f.tipo === 'parcelado') {
+      const parcelaIndex = (year - f.startYear) * 12 + (month - f.startMonth);
+      const parcelaNum = parcelaIndex + 1;
+      if (parcelaNum < 1 || parcelaNum > f.totalParcelas) return null; // not active this month
+      f = { ...f, parcelaAtual: parcelaNum };
+    }
     let status = getFixoStatus(f.id, month, year);
     // Auto-detect atrasado for current month
     if (status === 'pendente' && isCurrentMonth && todayDay > f.dia) {
       status = 'atrasado';
     }
     return { ...f, status };
-  });
+  }).filter(Boolean);
 
   const totalFixos = data.fixos.reduce((s, f) => s + f.valor, 0);
   const totalPago = withStatus.filter(f => f.status === 'pago').reduce((s, f) => s + f.valor, 0);
   const totalPendente = withStatus.filter(f => f.status !== 'pago').reduce((s, f) => s + f.valor, 0);
 
-  const statusLabel = { pendente: 'A vencer', atrasado: 'Atrasado', pago: 'Pago' };
-  const statusColor = { pendente: 'var(--amber)', atrasado: 'var(--red)', pago: 'var(--green)' };
-  const statusBg = { pendente: 'var(--amber-dim)', atrasado: 'var(--red-dim)', pago: 'var(--green-dim)' };
+  const statusLabel = { pendente: 'A vencer', atrasado: 'Atrasado', pago: 'Pago', pago_atrasado: 'Pago em atraso' };
+  const statusColor = { pendente: 'var(--amber)', atrasado: 'var(--red)', pago: 'var(--green)', pago_atrasado: 'var(--blue)' };
+  const statusBg = { pendente: 'var(--amber-dim)', atrasado: 'var(--red-dim)', pago: 'var(--green-dim)', pago_atrasado: 'var(--blue-dim)' };
 
   // Sort: atrasado first, then pendente by dia, then pago
-  const order = { atrasado: 0, pendente: 1, pago: 2 };
+  const order = { atrasado: 0, pendente: 1, pago_atrasado: 2, pago: 3 };
   withStatus.sort((a, b) => order[a.status] - order[b.status] || a.dia - b.dia);
 
   return `
@@ -1307,14 +1338,18 @@ function renderFixos() {
           <div class="tx-icon" style="background:${cat ? 'var(--red-dim)' : 'var(--bg3)'};width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${cat ? cat.icon : '📦'}</div>
           <div style="flex:1;min-width:0">
             <div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.nome}</div>
-            <div style="font-size:11px;color:var(--text2);margin-top:2px">Dia ${f.dia} · ${card ? card.nome : '—'}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">
+              Dia ${f.dia} · ${card ? card.nome : '—'}
+              ${f.tipo === 'parcelado' ? `<span class="tx-parcela-badge" style="margin-left:4px">${f.parcelaAtual}/${f.totalParcelas}x</span>` : ''}
+              ${f.tipo === 'recorrente' ? `<span class="recorrente-badge" style="margin-left:4px">🔁 Mensal</span>` : ''}
+            </div>
             ${alertMsg}
           </div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
           <div style="font-size:15px;font-weight:500;font-family:var(--mono);color:var(--red)">-${fmt(f.valor)}</div>
           <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${statusBg[f.status]};color:${statusColor[f.status]};font-weight:500">${statusLabel[f.status]}</span>
-          ${f.status !== 'pago' ? `<button class="btn-confirm-fixo" onclick="confirmarPagamento('${f.id}')">✓ Pago</button>` : `<button class="btn-confirm-fixo" style="color:var(--text3);border-color:var(--bg4)" onclick="desfazerPagamento('${f.id}')">Desfazer</button>`}
+          ${(f.status !== 'pago' && f.status !== 'pago_atrasado') ? `<button class="btn-confirm-fixo" onclick="confirmarPagamento('${f.id}')">✓ Pago</button>` : `<button class="btn-confirm-fixo" style="color:var(--text3);border-color:var(--bg4)" onclick="desfazerPagamento('${f.id}')">Desfazer</button>`}
         </div>
         <button onclick="deleteFixo('${f.id}')" style="position:absolute;top:10px;right:10px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:4px">×</button>
       </div>`;
@@ -1326,17 +1361,32 @@ function renderFixos() {
 
 function desfazerPagamento(fixoId) {
   const data = loadData();
+  const today = new Date();
+  const isCurrentMonth = state.currentMonth === today.getMonth() && state.currentYear === today.getFullYear();
+  const fixo = data.fixos.find(f => f.id === fixoId);
   // Remove transaction
   data.transactions = data.transactions.filter(t => t.id !== `tx_fixo_${fixoId}_${state.currentYear}_${state.currentMonth}`);
   saveData('transactions', data.transactions);
-  setFixoStatus(fixoId, state.currentMonth, state.currentYear, 'pendente');
+  // If past due day in current month, revert to atrasado instead of pendente
+  const revertStatus = (isCurrentMonth && fixo && today.getDate() > fixo.dia) ? 'atrasado' : 'pendente';
+  setFixoStatus(fixoId, state.currentMonth, state.currentYear, revertStatus);
   toast('Pagamento desfeito');
   renderPage();
 }
 
+function setFixoTipo(tipo) {
+  document.getElementById('fx-tipo-recorrente').classList.toggle('active', tipo === 'recorrente');
+  document.getElementById('fx-tipo-parcelado').classList.toggle('active', tipo === 'parcelado');
+  document.getElementById('fx-tipo-val').value = tipo;
+  document.getElementById('fx-parcelas-group').style.display = tipo === 'parcelado' ? 'block' : 'none';
+}
+
+// Polyfill for hidden input radio-like behavior
+document.querySelectorAll && document.querySelectorAll('input[name="fx-tipo"]') && true;
+Object.defineProperty(HTMLInputElement.prototype, 'fxTipoVal', { get() { return document.getElementById('fx-tipo-val')?.value || 'recorrente'; } });
+
 function openAddFixo() {
   const data = loadData();
-  // Populate selects
   const catSel = document.getElementById('fx-cat');
   catSel.innerHTML = data.categories.filter(c => c.tipo === 'expense' || c.tipo === 'both')
     .map(c => `<option value="${c.id}">${c.icon} ${c.nome}</option>`).join('');
@@ -1347,6 +1397,26 @@ function openAddFixo() {
   setupCurrencyInput(fxValor);
   document.getElementById('fx-nome').value = '';
   document.getElementById('fx-dia').value = '';
+  document.getElementById('fx-parcela-atual').value = '';
+  document.getElementById('fx-total-parcelas').value = '';
+  document.getElementById('fx-parcela-info').textContent = '';
+  setFixoTipo('recorrente');
+
+  // Live parcela info
+  const updateParcelaFixoInfo = () => {
+    const atual = parseInt(document.getElementById('fx-parcela-atual').value) || 0;
+    const total = parseInt(document.getElementById('fx-total-parcelas').value) || 0;
+    if (atual && total && total >= atual) {
+      const restantes = total - atual;
+      document.getElementById('fx-parcela-info').textContent =
+        `Parcela ${atual} de ${total} · faltam ${restantes} parcela${restantes !== 1 ? 's' : ''} após este mês`;
+    } else {
+      document.getElementById('fx-parcela-info').textContent = '';
+    }
+  };
+  document.getElementById('fx-parcela-atual').oninput = updateParcelaFixoInfo;
+  document.getElementById('fx-total-parcelas').oninput = updateParcelaFixoInfo;
+
   showModal('modal-add-fixo');
 }
 
