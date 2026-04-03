@@ -96,18 +96,29 @@ function getBillingMonth(dateStr, card) {
 // ===== RECURRENTS =====
 function applyRecurrents() {
   const data = loadData();
-  const key = `${state.currentYear}-${state.currentMonth}`;
+  const now = new Date();
+  const nowMonth = now.getMonth();
+  const nowYear = now.getFullYear();
+  // Only apply recurrents up to the real current month, never future
+  const targetMonth = state.currentMonth;
+  const targetYear = state.currentYear;
+  // Don't apply to future months
+  const targetDate = new Date(targetYear, targetMonth, 1);
+  const nowDate = new Date(nowYear, nowMonth, 1);
+  if (targetDate > nowDate) return;
+
+  const key = `${targetYear}-${targetMonth}`;
   const applied = JSON.parse(localStorage.getItem('mb_applied_recurrents') || '{}');
   if (applied[key]) return;
   let changed = false;
   data.recurrents.forEach(r => {
-    const exists = data.transactions.some(t => t.recurrentId === r.id && t.month === state.currentMonth && t.year === state.currentYear);
+    const exists = data.transactions.some(t => t.recurrentId === r.id && t.month === targetMonth && t.year === targetYear);
     if (!exists) {
       data.transactions.push({
         id: 'tx_' + Date.now() + '_' + Math.random(),
         desc: r.desc, valor: r.valor, cat: r.cat, conta: r.conta,
-        tipo: r.tipo, data: `${state.currentYear}-${String(state.currentMonth+1).padStart(2,'0')}-01`,
-        month: state.currentMonth, year: state.currentYear,
+        tipo: r.tipo, data: `${targetYear}-${String(targetMonth+1).padStart(2,'0')}-01`,
+        month: targetMonth, year: targetYear,
         recurrentId: r.id, isRecurrent: true,
         parcelas: 1, parcelaAtual: 1,
       });
@@ -127,6 +138,11 @@ function navigate(page) {
   });
   updateHeader();
   renderPage();
+}
+
+function navigateFiltered(filter) {
+  state.txFilter = filter;
+  navigate('transactions');
 }
 
 function renderPage() {
@@ -215,8 +231,14 @@ function renderDashboard() {
       <div class="balance-value ${balance >= 0 ? 'positive' : 'negative'}">${fmtSign(balance)}</div>
     </div>
     <div class="mini-cards">
-      <div class="mini-card"><div class="mini-card-label">Receitas</div><div class="mini-card-value income">${fmt(income)}</div></div>
-      <div class="mini-card"><div class="mini-card-label">Gastos</div><div class="mini-card-value expense">${fmt(expense)}</div></div>
+      <div class="mini-card mini-card-btn" onclick="navigateFiltered('income')" style="cursor:pointer">
+        <div class="mini-card-label">Receitas ›</div>
+        <div class="mini-card-value income">${fmt(income)}</div>
+      </div>
+      <div class="mini-card mini-card-btn" onclick="navigateFiltered('expense')" style="cursor:pointer">
+        <div class="mini-card-label">Gastos ›</div>
+        <div class="mini-card-value expense">${fmt(expense)}</div>
+      </div>
     </div>
     ${alerts ? `<div class="chart-container" style="margin-bottom:12px">${alerts}</div>` : ''}
     <div class="section-header">
@@ -399,7 +421,12 @@ function renderFaturaGroup(g, card, data, collapsed) {
       ${g.txs.map(t => {
         const cat = data.categories.find(c => c.id === t.cat);
         const parcelaTag = t.parcelas > 1 ? `<span class="tx-parcela-badge">${t.parcelaAtual}/${t.parcelas}x</span>` : '';
-        return `<div class="tx-item" style="margin-bottom:6px" onclick="editTransaction('${t.id}')">
+        return `<div class="tx-item" style="margin-bottom:6px"
+          onclick="if(!longPressTriggered)editTransaction('${t.id}');longPressTriggered=false;"
+          oncontextmenu="showTxMenu(event,'${t.id}');return false;"
+          ontouchstart="startLongPress(event,'${t.id}')"
+          ontouchend="cancelLongPress()"
+          ontouchmove="cancelLongPress()">
           <div class="tx-icon" style="background:${cat ? '#ff5c5c22' : 'var(--bg3)'}">${cat ? cat.icon : '📦'}</div>
           <div class="tx-info">
             <div class="tx-desc">${t.desc} ${parcelaTag}</div>
@@ -466,7 +493,7 @@ function renderTxItem(t, data) {
   const parcelaTag = t.parcelas > 1 ? `<span class="tx-parcela-badge">${t.parcelaAtual}/${t.parcelas}x</span>` : '';
   const recTag = t.isRecurrent ? `<span class="recorrente-badge">🔁</span>` : '';
   return `<div class="tx-item" 
-    onclick="editTransaction('${t.id}')"
+    onclick="if(!longPressTriggered)editTransaction('${t.id}');longPressTriggered=false;"
     oncontextmenu="showTxMenu(event,'${t.id}');return false;"
     ontouchstart="startLongPress(event,'${t.id}')"
     ontouchend="cancelLongPress()"
@@ -482,11 +509,14 @@ function renderTxItem(t, data) {
 
 // ===== LONG PRESS CONTEXT MENU =====
 let longPressTimer = null;
+let longPressTriggered = false;
 
 function startLongPress(e, txId) {
   cancelLongPress();
+  longPressTriggered = false;
   longPressTimer = setTimeout(() => {
-    if (navigator.vibrate) navigator.vibrate(40);
+    longPressTriggered = true;
+    if (navigator.vibrate) navigator.vibrate(60);
     showTxMenu(e, txId);
   }, 500);
 }
