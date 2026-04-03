@@ -456,7 +456,7 @@ function renderCardDetail() {
       ${pastFaturas.map(g => renderFaturaGroup(g, card, data, true)).join('')}
     ` : ''}
 
-    ${!sorted.length ? '<div class="empty-state"><div class="empty-state-icon">💳</div>Nenhum gasto neste cartão<br><button onclick="addGastoNoCartao('${card.id}')" style="margin-top:12px;background:var(--accent);color:#0f0f0f;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font)">+ Adicionar primeiro gasto</button></div>' : ''}
+    ${!sorted.length ? `<div class="empty-state"><div class="empty-state-icon">💳</div>Nenhum gasto neste cartão<br><button onclick="addGastoNoCartao('` + card.id + `')" style="margin-top:12px;background:var(--accent);color:#0f0f0f;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font)">+ Adicionar primeiro gasto</button></div>` : ''}
   `;
 }
 
