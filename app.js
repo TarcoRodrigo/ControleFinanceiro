@@ -1268,6 +1268,10 @@ function saveFixo() {
     fixo.startYear = startYear;
   }
 
+  if (tipoFixo === 'unica') {
+    fixo.addedMonth = state.currentMonth;
+    fixo.addedYear = state.currentYear;
+  }
   data.fixos.push(fixo);
   saveData('fixos', data.fixos);
   hideModal('modal-add-fixo');
@@ -1286,6 +1290,10 @@ function renderFixos() {
 
   // Compute status for each fixo
   const withStatus = data.fixos.map(f => {
+    // Check if unica: only show in the month it was added
+    if (f.tipo === 'unica') {
+      if (f.addedMonth !== undefined && (month !== f.addedMonth || year !== f.addedYear)) return null;
+    }
     // Check if parcelado fixo is finished or not yet started
     if (f.tipo === 'parcelado') {
       const parcelaIndex = (year - f.startYear) * 12 + (month - f.startMonth);
@@ -1342,6 +1350,7 @@ function renderFixos() {
               Dia ${f.dia} · ${card ? card.nome : '—'}
               ${f.tipo === 'parcelado' ? `<span class="tx-parcela-badge" style="margin-left:4px">${f.parcelaAtual}/${f.totalParcelas}x</span>` : ''}
               ${f.tipo === 'recorrente' ? `<span class="recorrente-badge" style="margin-left:4px">🔁 Mensal</span>` : ''}
+              ${f.tipo === 'unica' ? `<span style="font-size:10px;color:var(--text3);background:var(--bg4);padding:1px 5px;border-radius:4px;margin-left:4px">Única</span>` : ''}
             </div>
             ${alertMsg}
           </div>
@@ -1375,6 +1384,7 @@ function desfazerPagamento(fixoId) {
 }
 
 function setFixoTipo(tipo) {
+  document.getElementById('fx-tipo-unica').classList.toggle('active', tipo === 'unica');
   document.getElementById('fx-tipo-recorrente').classList.toggle('active', tipo === 'recorrente');
   document.getElementById('fx-tipo-parcelado').classList.toggle('active', tipo === 'parcelado');
   document.getElementById('fx-tipo-val').value = tipo;
