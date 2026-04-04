@@ -280,23 +280,55 @@ function renderDashboard() {
 function renderAccountCard(c, txs) {
   const data = loadData();
   const allTx = data.transactions;
-  // balance = all time income - expense for this account
+
+  // For credit cards: limit disponível = limit - all unpaid future/current faturas
+  // For other accounts: balance = all income - all expense
   let bal = 0;
   allTx.forEach(t => {
     if (t.conta !== c.id) return;
     if (t.tipo === 'income') bal += t.valor;
     else bal -= t.valor;
   });
-  const usedInMonth = (txs || []).filter(t => t.conta === c.id && t.tipo === 'expense').reduce((s, t) => s + t.valor, 0);
-  const limitDisp = c.limite > 0 ? c.limite - usedInMonth : null;
-  const pct = c.limite > 0 ? Math.min(usedInMonth / c.limite * 100, 100) : 0;
+
+  // Current month expenses for this card
+  const curMonthUsed = (txs || []).filter(t => t.conta === c.id && t.tipo === 'expense').reduce((s, t) => s + t.valor, 0);
+
+  let limitDisp = null;
+  let pct = 0;
+  let displayValue = curMonthUsed > 0 ? curMonthUsed : Math.abs(bal);
+
+  if (c.limite > 0) {
+    if (c.tipo === 'credito') {
+      // For credit cards: consider ALL future transactions (parcelas) as committed
+      const today = new Date();
+      const committed = allTx
+        .filter(t => t.conta === c.id && t.tipo === 'expense')
+        .filter(t => {
+          // Include current month and future months
+          const tDate = new Date(t.year, t.month, 1);
+          const nowDate = new Date(today.getFullYear(), today.getMonth(), 1);
+          return tDate >= nowDate;
+        })
+        .reduce((s, t) => s + t.valor, 0);
+      limitDisp = Math.max(c.limite - committed, 0);
+      pct = Math.min(committed / c.limite * 100, 100);
+      displayValue = curMonthUsed; // show current month fatura
+    } else {
+      limitDisp = c.limite - curMonthUsed;
+      pct = Math.min(curMonthUsed / c.limite * 100, 100);
+    }
+  }
+
+  const barColor = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--amber)' : c.cor;
   const vencInfo = c.vencimento ? `<div class="account-card-limit">Vence dia ${c.vencimento}</div>` : '';
+
   return `<div class="account-card" style="background:${c.cor}22;border:1px solid ${c.cor}44" onclick="viewCard('${c.id}')">
     <div class="account-card-type">${c.tipo}</div>
     <div class="account-card-name">${c.nome}</div>
-    <div class="account-card-balance" style="color:${c.cor}">${fmt(usedInMonth > 0 ? usedInMonth : Math.abs(bal))}</div>
-    ${c.limite > 0 ? `<div class="account-card-limit">Disponível: ${fmt(limitDisp)}</div>
-    <div class="account-card-bar"><div class="account-card-bar-fill" style="width:${pct}%"></div></div>` : ''}
+    <div class="account-card-balance" style="color:${c.cor}">${fmt(displayValue)}</div>
+    ${c.limite > 0 ? `
+    <div class="account-card-limit">Disponível: <span style="color:${limitDisp <= c.limite * 0.2 ? 'var(--red)' : 'inherit'}">${fmt(limitDisp)}</span></div>
+    <div class="account-card-bar"><div class="account-card-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>` : ''}
     ${vencInfo}
     <div class="account-card-limit" style="margin-top:4px;color:${c.cor}99">Toque para detalhes →</div>
   </div>`;
