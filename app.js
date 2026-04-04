@@ -28,6 +28,7 @@ function loadData() {
     recurrents: JSON.parse(localStorage.getItem('mb_recurrents') || '[]'),
     fixos: JSON.parse(localStorage.getItem('mb_fixos') || '[]'),
     fixos_status: JSON.parse(localStorage.getItem('mb_fixos_status') || '{}'),
+    guardar: JSON.parse(localStorage.getItem('mb_guardar') || '{}'),
   };
 }
 
@@ -74,7 +75,7 @@ function changeMonth(d) {
 
 function updateHeader() {
   document.getElementById('header-month').textContent = MONTHS[state.currentMonth] + ' ' + state.currentYear;
-  const titles = { dashboard: 'Início', transactions: 'Transações', reports: 'Relatórios', goals: 'Metas', card_detail: 'Detalhes do Cartão', fixos: 'Gastos Fixos' };
+  const titles = { dashboard: 'Início', transactions: 'Transações', reports: 'Relatórios', goals: 'Metas', card_detail: 'Detalhes do Cartão', fixos: 'Gastos Fixos', guardar: 'Guardar Dinheiro' };
   document.getElementById('header-title').textContent = titles[state.currentPage] || 'Meu Bolso';
 }
 
@@ -158,6 +159,7 @@ function renderPage() {
     case 'goals': main.innerHTML = renderGoals(); break;
     case 'card_detail': main.innerHTML = renderCardDetail(); break;
     case 'fixos': main.innerHTML = renderFixos(); break;
+    case 'guardar': main.innerHTML = renderGuardar(); break;
   }
 }
 
@@ -608,6 +610,7 @@ function startLongPress(e, txId, type) {
     longPressTriggered = true;
     if (navigator.vibrate) navigator.vibrate(60);
     if (type === 'fixo') showFixoMenu(e, txId);
+    else if (type === 'deposito') showDepositoMenu(e, txId);
     else showTxMenu(e, txId);
   }, 500);
 }
@@ -1352,6 +1355,205 @@ function confirmClearData() {
   }
 }
 
+
+
+// ===== GUARDAR DINHEIRO =====
+
+function getGuardarMonth() {
+  const data = loadData();
+  const key = `${state.currentYear}_${state.currentMonth}`;
+  return data.guardar[key] || { meta: 0, depositos: [] };
+}
+
+function saveGuardarMonth(obj) {
+  const data = loadData();
+  const key = `${state.currentYear}_${state.currentMonth}`;
+  data.guardar[key] = obj;
+  saveData('guardar', data.guardar);
+}
+
+function adicionarDeposito() {
+  const valor = getCurrencyValue(document.getElementById('gd-valor'));
+  const desc = document.getElementById('gd-desc').value.trim() || 'Depósito';
+  if (valor <= 0) { toast('Digite um valor'); return; }
+
+  const mes = getGuardarMonth();
+  mes.depositos.push({
+    id: 'dep_' + Date.now(),
+    valor, desc,
+    data: new Date().toISOString().split('T')[0],
+  });
+  saveGuardarMonth(mes);
+
+  const el = document.getElementById('gd-valor');
+  el.value = ''; el.dataset.cents = '';
+  document.getElementById('gd-desc').value = '';
+  toast('Depósito registrado!');
+  renderPage();
+}
+
+function salvarMetaMensal() {
+  const valor = getCurrencyValue(document.getElementById('gd-meta'));
+  const mes = getGuardarMonth();
+  mes.meta = valor;
+  saveGuardarMonth(mes);
+  toast('Meta salva!');
+  renderPage();
+}
+
+function excluirDeposito(depId) {
+  const mes = getGuardarMonth();
+  mes.depositos = mes.depositos.filter(d => d.id !== depId);
+  saveGuardarMonth(mes);
+  toast('Depósito removido');
+  renderPage();
+}
+
+function renderGuardar() {
+  const mes = getGuardarMonth();
+  const meta = mes.meta || 0;
+  const depositos = mes.depositos || [];
+  const total = depositos.reduce((s, d) => s + d.valor, 0);
+  const pct = meta > 0 ? (total / meta * 100) : 0;
+  const pctDisplay = Math.round(pct);
+  const falta = Math.max(meta - total, 0);
+  const excedente = Math.max(total - meta, 0);
+
+  // Bar color based on progress
+  const barColor = pct >= 100 ? 'var(--accent)' : pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--blue)' : 'var(--text3)';
+  // Bar width capped at 100% visually but label shows real %
+  const barWidth = Math.min(pct, 100);
+  // Extra bar for over 100%
+  const overPct = pct > 100 ? Math.min(pct - 100, 100) : 0;
+
+  // All-time total (across all months)
+  const data = loadData();
+  const allTimeTotal = Object.values(data.guardar).reduce((s, m) => {
+    return s + (m.depositos || []).reduce((ss, d) => ss + d.valor, 0);
+  }, 0);
+
+  return `
+    <!-- Summary cards -->
+    <div class="mini-cards" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
+      <div class="mini-card">
+        <div class="mini-card-label">Guardado este mês</div>
+        <div class="mini-card-value income">${fmt(total)}</div>
+      </div>
+      <div class="mini-card">
+        <div class="mini-card-label">Meta mensal</div>
+        <div class="mini-card-value">${meta > 0 ? fmt(meta) : '—'}</div>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="chart-container" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+        <div style="font-size:13px;color:var(--text2)">Progresso do mês</div>
+        <div style="font-size:24px;font-weight:600;font-family:var(--mono);color:${barColor}">${pctDisplay}%</div>
+      </div>
+
+      <!-- Main bar -->
+      <div style="height:28px;background:var(--bg4);border-radius:6px;overflow:hidden;margin-bottom:6px;position:relative">
+        <div style="height:100%;width:${barWidth}%;background:${barColor};border-radius:6px;transition:width 0.5s;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;min-width:${total>0?'4px':'0'}">
+          ${barWidth > 20 ? `<span style="font-size:11px;font-weight:600;color:${pct>=100?'#0f0f0f':'white'}">${fmt(total)}</span>` : ''}
+        </div>
+      </div>
+
+      ${overPct > 0 ? `
+      <!-- Extra bar for over 100% -->
+      <div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;margin-bottom:6px">
+        <div style="height:100%;width:${overPct}%;background:var(--accent);border-radius:4px;transition:width 0.5s"></div>
+      </div>
+      <div style="font-size:11px;color:var(--accent);text-align:right">🎉 +${fmt(excedente)} além da meta!</div>
+      ` : ''}
+
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:4px">
+        <span>R$ 0</span>
+        ${meta > 0 && falta > 0 ? `<span style="color:var(--text2)">Falta ${fmt(falta)}</span>` : ''}
+        <span>${meta > 0 ? fmt(meta) : ''}</span>
+      </div>
+    </div>
+
+    <!-- Set meta -->
+    <div class="chart-container" style="margin-bottom:12px">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Meta do mês</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="gd-meta" inputmode="numeric" placeholder="R$ 0,00"
+          value="${meta > 0 ? meta.toLocaleString('pt-BR',{minimumFractionDigits:2}) : ''}"
+          style="flex:1" onkeydown="if(event.key==='Enter')salvarMetaMensal()">
+        <button onclick="salvarMetaMensal()" style="padding:10px 16px;background:var(--bg3);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--text);cursor:pointer;font-family:var(--font);font-size:13px;white-space:nowrap">Definir</button>
+      </div>
+    </div>
+
+    <!-- Add deposit -->
+    <div class="chart-container" style="margin-bottom:12px">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Adicionar depósito</div>
+      <div class="form-group" style="margin-bottom:10px">
+        <input type="text" id="gd-valor" inputmode="numeric" placeholder="R$ 0,00"
+          onkeydown="if(event.key==='Enter')adicionarDeposito()">
+      </div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="gd-desc" placeholder="Descrição (opcional)" style="flex:1">
+        <button onclick="adicionarDeposito()" style="padding:10px 16px;background:var(--accent);color:#0f0f0f;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap">+ Guardar</button>
+      </div>
+    </div>
+
+    <!-- Deposits list -->
+    ${depositos.length ? `
+      <div class="section-header"><span class="section-title">Depósitos do mês</span></div>
+      ${[...depositos].reverse().map(d => `
+        <div class="tx-item"
+          oncontextmenu="showDepositoMenu(event,'${d.id}');return false;"
+          ontouchstart="startLongPress(event,'${d.id}','deposito')"
+          ontouchend="cancelLongPress()"
+          ontouchmove="cancelLongPress()">
+          <div class="tx-icon" style="background:var(--green-dim);font-size:18px">💰</div>
+          <div class="tx-info">
+            <div class="tx-desc">${d.desc}</div>
+            <div class="tx-meta">${new Date(d.data+'T12:00:00').toLocaleDateString('pt-BR')}</div>
+          </div>
+          <div class="tx-amount income">+${fmt(d.valor)}</div>
+        </div>
+      `).join('')}
+    ` : '<div class="empty-state" style="padding:20px 0"><div class="empty-state-icon">🏦</div>Nenhum depósito este mês</div>'}
+
+    <!-- All time total -->
+    ${allTimeTotal > 0 ? `
+      <div style="text-align:center;margin-top:20px;padding:16px;border-top:1px solid var(--line)">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total guardado (todos os meses)</div>
+        <div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--accent)">${fmt(allTimeTotal)}</div>
+      </div>
+    ` : ''}
+  `;
+}
+
+function showDepositoMenu(e, depId) {
+  const existing = document.getElementById('tx-context-menu');
+  if (existing) existing.remove();
+  const existingBd = document.getElementById('tx-context-backdrop');
+  if (existingBd) existingBd.remove();
+
+  const menu = document.createElement('div');
+  menu.id = 'tx-context-menu';
+  menu.className = 'context-menu';
+  menu.innerHTML = `
+    <div class="context-menu-header">Depósito</div>
+    <button class="context-menu-item danger" onclick="closeTxMenu();excluirDeposito('${depId}')">
+      <span>🗑️</span><span>Excluir</span>
+    </button>
+    <button class="context-menu-cancel" onclick="closeTxMenu()">Cancelar</button>
+  `;
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'tx-context-backdrop';
+  backdrop.className = 'context-backdrop';
+  backdrop.onclick = closeTxMenu;
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(menu);
+  e.preventDefault && e.preventDefault();
+  e.stopPropagation && e.stopPropagation();
+}
 
 // ===== GASTOS FIXOS =====
 

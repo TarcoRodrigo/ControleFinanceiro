@@ -36,7 +36,7 @@
     <button class="nav-btn" onclick="navigate('transactions')" data-page="transactions"><span class="nav-icon">↕</span><span>Transações</span></button>
     <button class="nav-btn nav-add" onclick="showModal('modal-add-transaction')"><span class="nav-icon-add">+</span></button>
     <button class="nav-btn" onclick="navigate('fixos')" data-page="fixos"><span class="nav-icon">📋</span><span>Fixos</span></button>
-    <button class="nav-btn" onclick="navigate('reports')" data-page="reports"><span class="nav-icon">◎</span><span>Relatórios</span></button>
+    <button class="nav-btn" onclick="navigate('guardar')" data-page="guardar"><span class="nav-icon">🏦</span><span>Guardar</span></button>
   </nav>
 </div>
 
@@ -247,6 +247,7 @@
         <button class="settings-item" onclick="hideModal('modal-settings');showModal('modal-categories')"><span>🏷️</span><span>Categorias</span><span class="settings-arrow">›</span></button>
         <button class="settings-item" onclick="hideModal('modal-settings');showModal('modal-budget')"><span>📊</span><span>Orçamento Mensal</span><span class="settings-arrow">›</span></button>
         <button class="settings-item" onclick="hideModal('modal-settings');navigate('goals')"><span>🎯</span><span>Metas</span><span class="settings-arrow">›</span></button>
+        <button class="settings-item" onclick="hideModal('modal-settings');navigate('reports')"><span>📊</span><span>Relatórios</span><span class="settings-arrow">›</span></button>
         <hr class="divider">
         <button class="settings-item danger" onclick="confirmClearData()"><span>🗑️</span><span>Limpar todos os dados</span><span class="settings-arrow">›</span></button>
       </div>
