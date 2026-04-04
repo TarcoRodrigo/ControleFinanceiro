@@ -1,4 +1,4 @@
-const CACHE = 'meu-bolso-v1';
+const CACHE = 'meu-bolso-v202604041313';
 const ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json'];
 
 self.addEventListener('install', e => {

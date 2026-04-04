@@ -322,9 +322,14 @@ function renderAccountCard(c, txs) {
   const barColor = pct >= 90 ? 'var(--red)' : pct >= 70 ? 'var(--amber)' : c.cor;
   const vencInfo = c.vencimento ? `<div class="account-card-limit">Vence dia ${c.vencimento}</div>` : '';
 
+  const presetDash = BANK_PRESETS.find(b => b.nome === c.nome || b.cor === c.cor);
+  const siglaDash = c.sigla || (presetDash ? presetDash.sigla : c.nome.slice(0,2).toUpperCase());
   return `<div class="account-card" style="background:${c.cor}22;border:1px solid ${c.cor}44" onclick="viewCard('${c.id}')">
-    <div class="account-card-type">${c.tipo}</div>
-    <div class="account-card-name">${c.nome}</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <div style="width:28px;height:28px;border-radius:6px;background:${c.cor};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:white;font-family:var(--mono);flex-shrink:0">${siglaDash}</div>
+      <div class="account-card-name" style="margin-bottom:0">${c.nome}</div>
+    </div>
+    <div class="account-card-type" style="margin-bottom:4px">${c.tipo}</div>
     <div class="account-card-balance" style="color:${c.cor}">${fmt(displayValue)}</div>
     ${c.limite > 0 ? `
     <div class="account-card-limit">Disponível: <span style="color:${limitDisp <= c.limite * 0.2 ? 'var(--red)' : 'inherit'}">${fmt(limitDisp)}</span></div>
@@ -811,7 +816,7 @@ function showModal(id) {
     const tValorEl = document.getElementById('t-valor');
     if (tValorEl) tValorEl.oninput = updateParcelaInfo;
   }
-  if (id === 'modal-cards') renderCardsList();
+  if (id === 'modal-cards') { renderCardsList(); renderBankPresets(); }
   if (id === 'modal-categories') { renderCategoriesList(); renderEmojiPicker('emoji-picker', 'selectedEmoji'); renderColorDots(); }
   if (id === 'modal-budget') renderBudgetModal();
   if (id === 'modal-add-goal') { setGoalType('monthly'); renderGoalEmojiPicker(); }
@@ -854,7 +859,11 @@ function populateCardSelect() {
   const data = loadData();
   const sel = document.getElementById('t-conta');
   if (!sel) return;
-  sel.innerHTML = data.cards.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  // For income: only show accounts (not credit/debit cards)
+  const filtered = state.transactionType === 'income'
+    ? data.cards.filter(c => c.tipo === 'conta' || c.tipo === 'pix' || c.tipo === 'poupanca')
+    : data.cards;
+  sel.innerHTML = filtered.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
   sel.onchange = () => {
     const card = data.cards.find(c => c.id === sel.value);
     document.getElementById('parcelas-group').style.display = (card && card.tipo === 'credito' && state.transactionType === 'expense') ? 'block' : 'none';
@@ -980,6 +989,67 @@ function deleteTransaction(id) {
   renderPage();
 }
 
+
+// ===== BANK PRESETS =====
+const BANK_PRESETS = [
+  { id: 'nubank',      nome: 'Nubank',        sigla: 'NU',  cor: '#8A05BE', tipo: 'credito' },
+  { id: 'itau',        nome: 'Itaú',          sigla: 'IT',  cor: '#EC7000', tipo: 'conta'   },
+  { id: 'bradesco',    nome: 'Bradesco',       sigla: 'BD',  cor: '#CC092F', tipo: 'conta'   },
+  { id: 'santander',   nome: 'Santander',      sigla: 'SN',  cor: '#EC0000', tipo: 'conta'   },
+  { id: 'bb',          nome: 'Banco do Brasil',sigla: 'BB',  cor: '#F8C300', tipo: 'conta'   },
+  { id: 'caixa',       nome: 'Caixa',          sigla: 'CX',  cor: '#005CA9', tipo: 'conta'   },
+  { id: 'inter',       nome: 'Inter',          sigla: 'IN',  cor: '#FF7A00', tipo: 'conta'   },
+  { id: 'c6',          nome: 'C6 Bank',        sigla: 'C6',  cor: '#242424', tipo: 'conta'   },
+  { id: 'next',        nome: 'Next',           sigla: 'NX',  cor: '#00D56E', tipo: 'conta'   },
+  { id: 'mercadopago', nome: 'Mercado Pago',   sigla: 'MP',  cor: '#00B1EA', tipo: 'pix'     },
+  { id: 'picpay',      nome: 'PicPay',         sigla: 'PP',  cor: '#21C25E', tipo: 'pix'     },
+  { id: 'pagbank',     nome: 'PagBank',        sigla: 'PB',  cor: '#03A64A', tipo: 'conta'   },
+  { id: 'sicoob',      nome: 'Sicoob',         sigla: 'SC',  cor: '#005F38', tipo: 'conta'   },
+  { id: 'sicredi',     nome: 'Sicredi',        sigla: 'SI',  cor: '#00843D', tipo: 'conta'   },
+  { id: 'neon',        nome: 'Neon',           sigla: 'NE',  cor: '#00D4FF', tipo: 'conta'   },
+  { id: 'will',        nome: 'Will Bank',      sigla: 'WL',  cor: '#FFD700', tipo: 'conta'   },
+  { id: 'visa',        nome: 'Visa',           sigla: 'VI',  cor: '#1A1F71', tipo: 'credito' },
+  { id: 'master',      nome: 'Mastercard',     sigla: 'MC',  cor: '#EB001B', tipo: 'credito' },
+  { id: 'elo',         nome: 'Elo',            sigla: 'EL',  cor: '#FFD700', tipo: 'credito' },
+  { id: 'amex',        nome: 'Amex',           sigla: 'AX',  cor: '#007BC1', tipo: 'credito' },
+  { id: 'hipercard',   nome: 'Hipercard',      sigla: 'HC',  cor: '#8B0000', tipo: 'credito' },
+  { id: 'dinheiro',    nome: 'Dinheiro',       sigla: '💵',  cor: '#4ade80', tipo: 'pix'     },
+  { id: 'outro',       nome: 'Outro',          sigla: '?',   cor: '#888888', tipo: 'conta'   },
+];
+
+function selectBankPreset(presetId) {
+  const preset = BANK_PRESETS.find(b => b.id === presetId);
+  if (!preset) return;
+  document.getElementById('c-nome').value = preset.nome;
+  document.getElementById('c-tipo').value = preset.tipo;
+  state.selectedColor = preset.cor;
+  state.selectedBankSigla = preset.sigla;
+  renderColorDots();
+  // Highlight selected preset
+  document.querySelectorAll('.bank-preset-btn').forEach(btn => {
+    btn.style.borderColor = btn.dataset.id === presetId ? preset.cor : 'var(--line)';
+    btn.style.background = btn.dataset.id === presetId ? preset.cor + '22' : 'var(--bg3)';
+  });
+}
+
+function renderBankPresets() {
+  const el = document.getElementById('bank-presets');
+  if (!el) return;
+  el.innerHTML = BANK_PRESETS.map(b => `
+    <button class="bank-preset-btn" data-id="${b.id}" onclick="selectBankPreset('${b.id}')"
+      style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 6px;
+        background:var(--bg3);border:1px solid var(--line);border-radius:var(--radius-sm);
+        cursor:pointer;min-width:56px;flex-shrink:0;transition:all 0.15s">
+      <div style="width:32px;height:32px;border-radius:8px;background:${b.cor};
+        display:flex;align-items:center;justify-content:center;
+        font-size:${b.sigla.length > 2 ? '14px' : '11px'};font-weight:700;
+        color:white;font-family:var(--mono);letter-spacing:-0.5px">${b.sigla}</div>
+      <span style="font-size:9px;color:var(--text2);text-align:center;max-width:56px;
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.nome.split(' ')[0]}</span>
+    </button>
+  `).join('');
+}
+
 // ===== CARDS =====
 const CARD_COLORS = ['#c8f135','#60a5fa','#4ade80','#f472b6','#fb923c','#a78bfa','#fbbf24','#34d399','#f87171','#38bdf8'];
 
@@ -1016,12 +1086,16 @@ function saveCard() {
   if (state.editingCardId) {
     const idx = data.cards.findIndex(c => c.id === state.editingCardId);
     if (idx >= 0) {
-      data.cards[idx] = { ...data.cards[idx], nome, tipo, limite, cor: state.selectedColor, fechamento, vencimento };
+      const presetE = BANK_PRESETS.find(b => b.nome === nome);
+      const siglaE = presetE ? presetE.sigla : nome.slice(0,2).toUpperCase();
+      data.cards[idx] = { ...data.cards[idx], nome, tipo, limite, cor: state.selectedColor, fechamento, vencimento, sigla: siglaE };
       toast('Cartão atualizado!');
     }
     state.editingCardId = null;
   } else {
-    data.cards.push({ id: 'c_' + Date.now(), nome, tipo, limite, cor: state.selectedColor, fechamento, vencimento });
+    const preset = BANK_PRESETS.find(b => b.nome === nome);
+    const sigla = preset ? preset.sigla : nome.slice(0,2).toUpperCase();
+    data.cards.push({ id: 'c_' + Date.now(), nome, tipo, limite, cor: state.selectedColor, fechamento, vencimento, sigla });
     toast('Conta adicionada!');
   }
   saveData('cards', data.cards);
@@ -1047,20 +1121,23 @@ function editCard(id) {
 }
 
 function renderCardsList() {
+  renderBankPresets();
   const data = loadData();
   const el = document.getElementById('cards-list');
   if (!el) return;
-  el.innerHTML = data.cards.map(c =>
-    `<div class="card-list-item">
-      <div class="card-dot" style="background:${c.cor}"></div>
+  el.innerHTML = data.cards.map(c => {
+    const preset = BANK_PRESETS.find(b => b.nome === c.nome || b.cor === c.cor);
+    const sigla = c.sigla || (preset ? preset.sigla : c.nome.slice(0,2).toUpperCase());
+    return `<div class="card-list-item">
+      <div style="width:32px;height:32px;border-radius:8px;background:${c.cor};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;font-family:var(--mono);flex-shrink:0">${sigla}</div>
       <div style="flex:1">
         <div class="card-list-name">${c.nome}</div>
         <div class="card-list-info">${c.tipo}${c.limite > 0 ? ' · Limite: ' + fmt(c.limite) : ''}${c.fechamento ? ' · Fecha dia ' + c.fechamento : ''}${c.vencimento ? ' · Vence dia ' + c.vencimento : ''}</div>
       </div>
       <button onclick="editCard('${c.id}')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:14px;padding:0 8px">✏️</button>
       <button class="card-list-del" onclick="deleteCard('${c.id}')">×</button>
-    </div>`
-  ).join('') || '<div style="color:var(--text3);font-size:13px">Nenhuma conta cadastrada</div>';
+    </div>`;
+  }).join('') || '<div style="color:var(--text3);font-size:13px">Nenhuma conta cadastrada</div>';
   renderColorDots();
 }
 
