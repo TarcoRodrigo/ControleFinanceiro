@@ -198,7 +198,7 @@
 <div class="modal-overlay" id="modal-add-fixo">
   <div class="modal">
     <div class="modal-header">
-      <h2 class="modal-title">Novo Gasto Fixo</h2>
+      <h2 class="modal-title" id="modal-add-fixo-title">Novo Gasto Fixo</h2>
       <button class="modal-close" onclick="hideModal('modal-add-fixo')">×</button>
     </div>
     <div class="modal-body">
@@ -229,7 +229,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" onclick="hideModal('modal-add-fixo')">Cancelar</button>
-      <button class="btn-primary" onclick="saveFixo()">Salvar</button>
+      <button class="btn-primary" id="fx-save-btn" onclick="saveFixo()">Salvar</button>
     </div>
   </div>
 </div>

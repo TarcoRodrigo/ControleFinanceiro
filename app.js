@@ -13,6 +13,7 @@ let state = {
   editingTxId: null,
   editingCatId: null,
   editingCardId: null,
+  editingFixoId: null,
   viewingCardId: null,
 };
 
@@ -590,13 +591,14 @@ function renderTxItem(t, data) {
 let longPressTimer = null;
 let longPressTriggered = false;
 
-function startLongPress(e, txId) {
+function startLongPress(e, txId, type) {
   cancelLongPress();
   longPressTriggered = false;
   longPressTimer = setTimeout(() => {
     longPressTriggered = true;
     if (navigator.vibrate) navigator.vibrate(60);
-    showTxMenu(e, txId);
+    if (type === 'fixo') showFixoMenu(e, txId);
+    else showTxMenu(e, txId);
   }, 500);
 }
 
@@ -655,6 +657,84 @@ function confirmDeleteTx(id) {
   if (confirm(`Excluir "${t.desc}"?`)) {
     deleteTransaction(id);
   }
+}
+
+function showFixoMenu(e, fixoId) {
+  const existing = document.getElementById('tx-context-menu');
+  if (existing) existing.remove();
+  const existingBd = document.getElementById('tx-context-backdrop');
+  if (existingBd) existingBd.remove();
+
+  const data = loadData();
+  const f = data.fixos.find(f => f.id === fixoId);
+  if (!f) return;
+
+  const menu = document.createElement('div');
+  menu.id = 'tx-context-menu';
+  menu.className = 'context-menu';
+  menu.innerHTML = `
+    <div class="context-menu-header">${f.nome} · ${fmt(f.valor)}</div>
+    <button class="context-menu-item" onclick="closeTxMenu();openEditFixo('${fixoId}')">
+      <span>✏️</span><span>Editar</span>
+    </button>
+    <button class="context-menu-item danger" onclick="closeTxMenu();confirmDeleteFixo('${fixoId}')">
+      <span>🗑️</span><span>Excluir</span>
+    </button>
+    <button class="context-menu-cancel" onclick="closeTxMenu()">Cancelar</button>
+  `;
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'tx-context-backdrop';
+  backdrop.className = 'context-backdrop';
+  backdrop.onclick = closeTxMenu;
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(menu);
+  e.preventDefault && e.preventDefault();
+  e.stopPropagation && e.stopPropagation();
+}
+
+function confirmDeleteFixo(id) {
+  const data = loadData();
+  const f = data.fixos.find(f => f.id === id);
+  if (!f) return;
+  if (confirm(`Excluir "${f.nome}"?`)) {
+    deleteFixo(id);
+  }
+}
+
+function openEditFixo(fixoId) {
+  const data = loadData();
+  const f = data.fixos.find(f => f.id === fixoId);
+  if (!f) return;
+  state.editingFixoId = fixoId;
+
+  // Populate selects
+  const catSel = document.getElementById('fx-cat');
+  catSel.innerHTML = data.categories.filter(c => c.tipo === 'expense' || c.tipo === 'both')
+    .map(c => `<option value="${c.id}">${c.icon} ${c.nome}</option>`).join('');
+  const contaSel = document.getElementById('fx-conta');
+  contaSel.innerHTML = data.cards.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+
+  // Fill values
+  document.getElementById('fx-nome').value = f.nome;
+  const fxValor = document.getElementById('fx-valor');
+  setupCurrencyInput(fxValor);
+  setCurrencyValue(fxValor, f.valor);
+  catSel.value = f.cat;
+  contaSel.value = f.conta;
+  document.getElementById('fx-dia').value = f.dia;
+  document.getElementById('fx-parcela-atual').value = f.parcelaAtual || '';
+  document.getElementById('fx-total-parcelas').value = f.totalParcelas || '';
+  document.getElementById('fx-parcela-info').textContent = '';
+
+  setFixoTipo(f.tipo || 'recorrente');
+
+  // Change save button text
+  document.getElementById('fx-save-btn').textContent = 'Salvar edição';
+  document.getElementById('modal-add-fixo-title').textContent = 'Editar Gasto Fixo';
+
+  document.getElementById('modal-add-fixo').classList.add('open');
 }
 
 function getCatColor(cat) {
@@ -1419,7 +1499,11 @@ function renderFixos() {
       }
       if (f.status === 'atrasado') alertMsg = `<div style="font-size:11px;color:var(--red);margin-top:4px">⚠ Pagamento atrasado!</div>`;
 
-      return `<div class="fixo-card">
+      return `<div class="fixo-card"
+        oncontextmenu="showFixoMenu(event,'${f.id}');return false;"
+        ontouchstart="startLongPress(event,'${f.id}','fixo')"
+        ontouchend="cancelLongPress()"
+        ontouchmove="cancelLongPress()">
         <div class="fixo-card-left">
           <div class="tx-icon" style="background:${cat ? 'var(--red-dim)' : 'var(--bg3)'};width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${cat ? cat.icon : '📦'}</div>
           <div style="flex:1;min-width:0">
@@ -1485,6 +1569,9 @@ function openAddFixo() {
   document.getElementById('fx-total-parcelas').value = '';
   document.getElementById('fx-parcela-info').textContent = '';
   setFixoTipo('recorrente');
+  state.editingFixoId = null;
+  document.getElementById('fx-save-btn').textContent = 'Salvar';
+  document.getElementById('modal-add-fixo-title').textContent = 'Novo Gasto Fixo';
 
   // Live parcela info
   const updateParcelaFixoInfo = () => {
