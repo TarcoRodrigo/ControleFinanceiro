@@ -858,12 +858,30 @@ function populateCategorySelect() {
 function populateCardSelect() {
   const data = loadData();
   const sel = document.getElementById('t-conta');
+  const label = document.querySelector('label[for="t-conta"]') || (() => {
+    // find label sibling
+    const el = document.getElementById('t-conta');
+    return el ? el.closest('.form-group')?.querySelector('label') : null;
+  })();
+
   if (!sel) return;
+
   // For income: only show accounts (not credit/debit cards)
-  const filtered = state.transactionType === 'income'
+  const isIncome = state.transactionType === 'income';
+  const filtered = isIncome
     ? data.cards.filter(c => c.tipo === 'conta' || c.tipo === 'pix' || c.tipo === 'poupanca')
     : data.cards;
-  sel.innerHTML = filtered.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+
+  // Update label
+  const labelEl = document.getElementById('t-conta-label');
+  if (labelEl) labelEl.textContent = isIncome ? 'Conta' : 'Conta / Cartão';
+
+  if (filtered.length === 0) {
+    sel.innerHTML = '<option value="">Nenhuma conta cadastrada</option>';
+  } else {
+    sel.innerHTML = filtered.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  }
+
   sel.onchange = () => {
     const card = data.cards.find(c => c.id === sel.value);
     document.getElementById('parcelas-group').style.display = (card && card.tipo === 'credito' && state.transactionType === 'expense') ? 'block' : 'none';
@@ -1911,6 +1929,430 @@ function openAddFixo() {
   document.getElementById('fx-total-parcelas').oninput = updateParcelaFixoInfo;
 
   showModal('modal-add-fixo');
+}
+
+
+// ===== IMPORTAR EXTRATO =====
+
+function openImportModal() {
+  hideModal('modal-settings');
+  document.getElementById('import-preview').innerHTML = '';
+  document.getElementById('import-file').value = '';
+  document.getElementById('import-status').textContent = '';
+  document.getElementById('import-confirm-btn').style.display = 'none';
+  // Populate card select
+  const data = loadData();
+  const sel = document.getElementById('import-conta');
+  sel.innerHTML = data.cards.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  showModal('modal-import');
+}
+
+function handleImportFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    let transactions = [];
+    try {
+      if (ext === 'ofx' || ext === 'ofc') {
+        transactions = parseOFX(text);
+      } else if (ext === 'csv') {
+        transactions = parseCSVAuto(text, file.name);
+      } else {
+        // Try CSV anyway
+        transactions = parseCSVAuto(text, file.name);
+      }
+      showImportPreview(transactions);
+    } catch(err) {
+      document.getElementById('import-status').textContent = 'Erro ao ler arquivo: ' + err.message;
+    }
+  };
+  reader.readAsText(file, 'latin1');
+}
+
+// ===== OFX PARSER =====
+function parseOFX(text) {
+  const transactions = [];
+  // Handle both SGML and XML OFX
+  const txRegex = /<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi;
+  let match;
+  while ((match = txRegex.exec(text)) !== null) {
+    const block = match[1];
+    const get = (tag) => {
+      const m = new RegExp(`<${tag}>([^<\n\r]+)`, 'i').exec(block);
+      return m ? m[1].trim() : '';
+    };
+    const dtposted = get('DTPOSTED') || get('DTUSER');
+    const trnamt = get('TRNAMT');
+    const memo = get('MEMO') || get('NAME') || get('FITID');
+    const trntype = get('TRNTYPE');
+
+    if (!dtposted || !trnamt) continue;
+
+    // Parse date: YYYYMMDD or YYYYMMDDHHMMSS
+    const dateStr = dtposted.slice(0,8);
+    const year = parseInt(dateStr.slice(0,4));
+    const month = parseInt(dateStr.slice(4,6)) - 1;
+    const day = parseInt(dateStr.slice(6,8));
+    const dateISO = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+
+    const valor = Math.abs(parseFloat(trnamt.replace(',','.')));
+    const tipo = parseFloat(trnamt.replace(',','.')) >= 0 ? 'income' : 'expense';
+
+    transactions.push({ desc: memo, valor, tipo, data: dateISO, month, year });
+  }
+
+  // SGML fallback (older OFX without XML tags)
+  if (transactions.length === 0) {
+    const lines = text.split(/\n|\r/);
+    let current = null;
+    lines.forEach(line => {
+      line = line.trim();
+      if (line === '<STMTTRN>') { current = {}; }
+      else if (line === '</STMTTRN>' && current) {
+        if (current.date && current.valor !== undefined) {
+          transactions.push(current);
+        }
+        current = null;
+      } else if (current) {
+        const m = /^<([^>]+)>(.+)$/.exec(line);
+        if (m) {
+          const tag = m[1].toUpperCase();
+          const val = m[2].trim();
+          if (tag === 'DTPOSTED' || tag === 'DTUSER') {
+            const ds = val.slice(0,8);
+            const y = parseInt(ds.slice(0,4));
+            const mo = parseInt(ds.slice(4,6)) - 1;
+            const d = parseInt(ds.slice(6,8));
+            current.data = `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            current.month = mo; current.year = y;
+          } else if (tag === 'TRNAMT') {
+            const v = parseFloat(val.replace(',','.'));
+            current.valor = Math.abs(v);
+            current.tipo = v >= 0 ? 'income' : 'expense';
+          } else if (tag === 'MEMO' || tag === 'NAME') {
+            current.desc = current.desc || val;
+          }
+        }
+      }
+    });
+  }
+  return transactions;
+}
+
+// ===== CSV AUTO PARSER =====
+function parseCSVAuto(text, filename) {
+  const lower = filename.toLowerCase();
+  // Detect bank by filename or content
+  if (lower.includes('nubank')) return parseNubank(text);
+  if (lower.includes('inter')) return parseInter(text);
+  if (lower.includes('itau') || lower.includes('itaú')) return parseItau(text);
+  if (lower.includes('bradesco')) return parseBradesco(text);
+  if (lower.includes('santander')) return parseSantander(text);
+  if (lower.includes('bb') || lower.includes('brasil')) return parseBB(text);
+  if (lower.includes('c6')) return parseC6(text);
+  if (lower.includes('mercado') || lower.includes('mp')) return parseMercadoPago(text);
+  // Generic auto-detect
+  return parseGenericCSV(text);
+}
+
+function csvLines(text) {
+  return text.split(/\r?\n/).filter(l => l.trim());
+}
+
+function csvSplit(line) {
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if ((c === ',' || c === ';') && !inQ) { result.push(cur.trim()); cur = ''; }
+    else cur += c;
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function parseDateBR(str) {
+  if (!str) return null;
+  str = str.replace(/"/g,'').trim();
+  // DD/MM/YYYY
+  let m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+  if (m) return { data: `${m[3]}-${m[2]}-${m[1]}`, month: parseInt(m[2])-1, year: parseInt(m[3]) };
+  // YYYY-MM-DD
+  m = /^(\d{4})-(\d{2})-(\d{2})/.exec(str);
+  if (m) return { data: `${m[1]}-${m[2]}-${m[3]}`, month: parseInt(m[2])-1, year: parseInt(m[1]) };
+  // DD/MM/YY
+  m = /^(\d{2})\/(\d{2})\/(\d{2})$/.exec(str);
+  if (m) return { data: `20${m[3]}-${m[2]}-${m[1]}`, month: parseInt(m[2])-1, year: 2000+parseInt(m[3]) };
+  return null;
+}
+
+function parseVal(str) {
+  if (!str) return 0;
+  str = str.replace(/"/g,'').trim();
+  // Remove R$, spaces
+  str = str.replace(/R\$\s*/g,'').replace(/\s/g,'');
+  // Handle Brazilian format: 1.234,56
+  if (str.includes(',') && str.includes('.')) {
+    str = str.replace(/\./g,'').replace(',','.');
+  } else if (str.includes(',')) {
+    str = str.replace(',','.');
+  }
+  return Math.abs(parseFloat(str)) || 0;
+}
+
+function parseSign(str) {
+  if (!str) return 'expense';
+  str = str.replace(/"/g,'').trim();
+  if (str.startsWith('-') || str.toLowerCase().includes('déb') || str.toLowerCase() === 'd') return 'expense';
+  return 'income';
+}
+
+// Nubank: Date,Category,Title,Amount
+function parseNubank(text) {
+  const lines = csvLines(text);
+  const txs = [];
+  lines.slice(1).forEach(line => {
+    const cols = csvSplit(line);
+    if (cols.length < 4) return;
+    const d = parseDateBR(cols[0]);
+    if (!d) return;
+    const valor = parseVal(cols[3]);
+    if (!valor) return;
+    const tipo = parseFloat(cols[3].replace(',','.')) < 0 ? 'expense' : 'income';
+    txs.push({ desc: cols[2] || cols[1], valor, tipo, ...d });
+  });
+  return txs;
+}
+
+// Inter: Data;Tipo;Descrição;Valor
+function parseInter(text) {
+  const lines = csvLines(text);
+  const txs = [];
+  lines.slice(1).forEach(line => {
+    const cols = csvSplit(line);
+    if (cols.length < 4) return;
+    const d = parseDateBR(cols[0]);
+    if (!d) return;
+    const valor = parseVal(cols[3]);
+    if (!valor) return;
+    const tipo = parseSign(cols[1]);
+    txs.push({ desc: cols[2], valor, tipo, ...d });
+  });
+  return txs;
+}
+
+// Itaú: Data;Histórico;Docto;Crédito;Débito;Saldo
+function parseItau(text) {
+  const lines = csvLines(text);
+  const txs = [];
+  lines.forEach(line => {
+    const cols = csvSplit(line);
+    if (cols.length < 5) return;
+    const d = parseDateBR(cols[0]);
+    if (!d) return;
+    const credito = parseVal(cols[3]);
+    const debito = parseVal(cols[4]);
+    if (!credito && !debito) return;
+    txs.push({ desc: cols[1], valor: credito || debito, tipo: credito > 0 ? 'income' : 'expense', ...d });
+  });
+  return txs;
+}
+
+// Bradesco: similar to Itaú
+function parseBradesco(text) {
+  return parseGenericCSV(text);
+}
+
+// Santander: Data;Histórico;Valor;Saldo
+function parseSantander(text) {
+  const lines = csvLines(text);
+  const txs = [];
+  lines.slice(1).forEach(line => {
+    const cols = csvSplit(line);
+    if (cols.length < 3) return;
+    const d = parseDateBR(cols[0]);
+    if (!d) return;
+    const raw = cols[2].replace(/"/g,'').trim();
+    const valor = parseVal(raw);
+    if (!valor) return;
+    const tipo = raw.startsWith('-') ? 'expense' : 'income';
+    txs.push({ desc: cols[1], valor, tipo, ...d });
+  });
+  return txs;
+}
+
+// BB: Data;Dependência Origem;Histórico;Data do Balanço;Valor;Saldo
+function parseBB(text) {
+  const lines = csvLines(text);
+  const txs = [];
+  lines.slice(1).forEach(line => {
+    const cols = csvSplit(line);
+    if (cols.length < 5) return;
+    const d = parseDateBR(cols[0]);
+    if (!d) return;
+    const raw = cols[4].replace(/"/g,'').trim();
+    const valor = parseVal(raw);
+    if (!valor) return;
+    const tipo = raw.startsWith('-') ? 'expense' : 'income';
+    txs.push({ desc: cols[2], valor, tipo, ...d });
+  });
+  return txs;
+}
+
+// C6: Data;Lançamento;Valor
+function parseC6(text) {
+  const lines = csvLines(text);
+  const txs = [];
+  lines.slice(1).forEach(line => {
+    const cols = csvSplit(line);
+    if (cols.length < 3) return;
+    const d = parseDateBR(cols[0]);
+    if (!d) return;
+    const raw = cols[2].replace(/"/g,'').trim();
+    const valor = parseVal(raw);
+    if (!valor) return;
+    const tipo = raw.startsWith('-') ? 'expense' : 'income';
+    txs.push({ desc: cols[1], valor, tipo, ...d });
+  });
+  return txs;
+}
+
+// Mercado Pago: DATE;DESCRIPTION;AMOUNT;TYPE
+function parseMercadoPago(text) {
+  const lines = csvLines(text);
+  const txs = [];
+  lines.slice(1).forEach(line => {
+    const cols = csvSplit(line);
+    if (cols.length < 3) return;
+    const d = parseDateBR(cols[0]);
+    if (!d) return;
+    const valor = parseVal(cols[2]);
+    if (!valor) return;
+    const tipo = parseSign(cols[2]);
+    txs.push({ desc: cols[1], valor, tipo, ...d });
+  });
+  return txs;
+}
+
+// Generic: try to auto-detect columns
+function parseGenericCSV(text) {
+  const lines = csvLines(text);
+  if (lines.length < 2) return [];
+  const headers = csvSplit(lines[0]).map(h => h.toLowerCase().replace(/"/g,'').trim());
+  
+  // Find column indices
+  const dateIdx = headers.findIndex(h => h.includes('data') || h.includes('date'));
+  const descIdx = headers.findIndex(h => h.includes('desc') || h.includes('hist') || h.includes('memo') || h.includes('título') || h.includes('title') || h.includes('lança'));
+  const valIdx  = headers.findIndex(h => h.includes('valor') || h.includes('amount') || h.includes('value'));
+  const debIdx  = headers.findIndex(h => h.includes('déb') || h.includes('deb') || h.includes('saída'));
+  const credIdx = headers.findIndex(h => h.includes('créd') || h.includes('cred') || h.includes('entrada'));
+  const tipoIdx = headers.findIndex(h => h.includes('tipo') || h.includes('type'));
+
+  const txs = [];
+  lines.slice(1).forEach(line => {
+    const cols = csvSplit(line);
+    const d = dateIdx >= 0 ? parseDateBR(cols[dateIdx]) : null;
+    if (!d) return;
+    const desc = descIdx >= 0 ? cols[descIdx]?.replace(/"/g,'').trim() : 'Importado';
+    
+    let valor = 0, tipo = 'expense';
+    if (debIdx >= 0 || credIdx >= 0) {
+      const deb = debIdx >= 0 ? parseVal(cols[debIdx]) : 0;
+      const cred = credIdx >= 0 ? parseVal(cols[credIdx]) : 0;
+      if (deb > 0) { valor = deb; tipo = 'expense'; }
+      else if (cred > 0) { valor = cred; tipo = 'income'; }
+    } else if (valIdx >= 0) {
+      const raw = cols[valIdx]?.replace(/"/g,'').trim() || '';
+      valor = parseVal(raw);
+      tipo = tipoIdx >= 0 ? parseSign(cols[tipoIdx]) : (raw.startsWith('-') ? 'expense' : 'income');
+    }
+    if (!valor) return;
+    txs.push({ desc, valor, tipo, ...d });
+  });
+  return txs;
+}
+
+// ===== PREVIEW & CONFIRM =====
+let importedTransactions = [];
+
+function showImportPreview(txs) {
+  importedTransactions = txs;
+  const el = document.getElementById('import-preview');
+  const statusEl = document.getElementById('import-status');
+  const confirmBtn = document.getElementById('import-confirm-btn');
+
+  if (txs.length === 0) {
+    statusEl.textContent = 'Nenhuma transação encontrada. Verifique o formato do arquivo.';
+    confirmBtn.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+
+  statusEl.textContent = `${txs.length} transação${txs.length > 1 ? 'ões' : ''} encontrada${txs.length > 1 ? 's' : ''}`;
+  confirmBtn.style.display = 'block';
+
+  const income = txs.filter(t => t.tipo === 'income').reduce((s,t) => s+t.valor, 0);
+  const expense = txs.filter(t => t.tipo === 'expense').reduce((s,t) => s+t.valor, 0);
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div class="mini-card"><div class="mini-card-label">Entradas</div><div class="mini-card-value income" style="font-size:14px">${fmt(income)}</div></div>
+      <div class="mini-card"><div class="mini-card-label">Saídas</div><div class="mini-card-value expense" style="font-size:14px">${fmt(expense)}</div></div>
+    </div>
+    <div style="max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--radius-sm)">
+      ${txs.slice(0,50).map((t,i) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px">
+          <span style="font-size:16px">${t.tipo === 'income' ? '📥' : '📤'}</span>
+          <div style="flex:1;min-width:0">
+            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.desc}</div>
+            <div style="font-size:11px;color:var(--text3)">${t.data}</div>
+          </div>
+          <div style="font-weight:500;font-family:var(--mono);color:${t.tipo === 'income' ? 'var(--green)' : 'var(--red)'}">
+            ${t.tipo === 'income' ? '+' : '-'}${fmt(t.valor)}
+          </div>
+        </div>
+      `).join('')}
+      ${txs.length > 50 ? `<div style="padding:10px;text-align:center;font-size:12px;color:var(--text3)">... e mais ${txs.length - 50} transações</div>` : ''}
+    </div>
+  `;
+}
+
+function confirmImport() {
+  const contaId = document.getElementById('import-conta').value;
+  if (!contaId) { toast('Selecione uma conta'); return; }
+  const data = loadData();
+  const card = data.cards.find(c => c.id === contaId);
+
+  let added = 0;
+  importedTransactions.forEach(t => {
+    // Check for duplicates (same desc + date + valor)
+    const dup = data.transactions.some(ex =>
+      ex.desc === t.desc && ex.data === t.data && Math.abs(ex.valor - t.valor) < 0.01 && ex.conta === contaId
+    );
+    if (dup) return;
+
+    const bm = card ? getBillingMonth(t.data, card) : { month: t.month, year: t.year };
+    data.transactions.push({
+      id: 'tx_imp_' + Date.now() + '_' + Math.random(),
+      desc: t.desc, valor: t.valor, tipo: t.tipo,
+      cat: t.tipo === 'income' ? 'cat9' : 'cat12',
+      conta: contaId, data: t.data,
+      month: bm.month, year: bm.year,
+      parcelas: 1, parcelaAtual: 1,
+      isRecurrent: false, imported: true,
+    });
+    added++;
+  });
+
+  saveData('transactions', data.transactions);
+  hideModal('modal-import');
+  toast(`${added} transaç${added !== 1 ? 'ões importadas' : 'ão importada'}!`);
+  importedTransactions = [];
+  renderPage();
 }
 
 // ===== NOTIFICATIONS =====

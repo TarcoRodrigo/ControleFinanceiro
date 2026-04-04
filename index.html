@@ -56,7 +56,7 @@
       <div class="form-group"><label>Valor</label><input type="text" id="t-valor" inputmode="numeric" placeholder="R$ 0,00"></div>
       <div class="form-row-2">
         <div class="form-group"><label>Categoria</label><select id="t-cat"></select></div>
-        <div class="form-group"><label>Conta / Cartão</label><select id="t-conta"></select></div>
+        <div class="form-group"><label id="t-conta-label">Conta / Cartão</label><select id="t-conta"></select></div>
       </div>
       <div class="form-group"><label>Data</label><input type="date" id="t-data"></div>
       <div class="form-group" id="parcelas-group" style="display:none">
@@ -238,6 +238,35 @@
   </div>
 </div>
 
+<!-- IMPORT EXTRATO -->
+<div class="modal-overlay" id="modal-import">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Importar Extrato</h2>
+      <button class="modal-close" onclick="hideModal('modal-import')">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc">Suporta arquivos OFX (todos os bancos) e CSV (Nubank, Inter, Itaú, Bradesco, Santander, BB, C6, Mercado Pago).</p>
+      <div class="form-group">
+        <label>Conta / Cartão de destino</label>
+        <select id="import-conta"></select>
+      </div>
+      <div class="form-group">
+        <label>Arquivo do extrato</label>
+        <input type="file" id="import-file" accept=".csv,.ofx,.ofc,.txt"
+          onchange="handleImportFile(this)"
+          style="padding:10px;background:var(--bg3);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--text);width:100%">
+      </div>
+      <div id="import-status" style="font-size:13px;color:var(--accent);margin-bottom:8px"></div>
+      <div id="import-preview"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="hideModal('modal-import')">Cancelar</button>
+      <button class="btn-primary" id="import-confirm-btn" style="display:none" onclick="confirmImport()">Importar</button>
+    </div>
+  </div>
+</div>
+
 <!-- SETTINGS -->
 <div class="modal-overlay" id="modal-settings">
   <div class="modal">
@@ -252,6 +281,7 @@
         <button class="settings-item" onclick="hideModal('modal-settings');showModal('modal-budget')"><span>📊</span><span>Orçamento Mensal</span><span class="settings-arrow">›</span></button>
         <button class="settings-item" onclick="hideModal('modal-settings');navigate('goals')"><span>🎯</span><span>Metas</span><span class="settings-arrow">›</span></button>
         <button class="settings-item" onclick="hideModal('modal-settings');navigate('reports')"><span>📊</span><span>Relatórios</span><span class="settings-arrow">›</span></button>
+        <button class="settings-item" onclick="openImportModal()"><span>📥</span><span>Importar Extrato</span><span class="settings-arrow">›</span></button>
         <hr class="divider">
         <button class="settings-item danger" onclick="confirmClearData()"><span>🗑️</span><span>Limpar todos os dados</span><span class="settings-arrow">›</span></button>
       </div>
