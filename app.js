@@ -159,7 +159,7 @@ function renderPage() {
     case 'goals': main.innerHTML = renderGoals(); break;
     case 'card_detail': main.innerHTML = renderCardDetail(); break;
     case 'fixos': main.innerHTML = renderFixos(); break;
-    case 'guardar': main.innerHTML = renderGuardar(); break;
+    case 'guardar': main.innerHTML = renderGuardar(); setupAllCurrencyInputs(); break;
   }
 }
 
@@ -185,7 +185,7 @@ function setupCurrencyInput(el) {
 }
 
 function setupAllCurrencyInputs() {
-  const ids = ['t-valor','c-limite','g-valor','g-total','g-atual','fx-valor'];
+  const ids = ['t-valor','c-limite','g-valor','g-total','g-atual','fx-valor','gd-valor','gd-meta'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (el) setupCurrencyInput(el);
