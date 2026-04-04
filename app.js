@@ -167,16 +167,26 @@ function fmtSign(v) { return (v >= 0 ? '+' : '-') + ' R$ ' + Math.abs(v).toLocal
 
 // ===== CURRENCY INPUT =====
 function setupCurrencyInput(el) {
+  if (!el || el.dataset.currencySetup) return;
+  el.dataset.currencySetup = '1';
   el.setAttribute('inputmode', 'numeric');
   el.setAttribute('placeholder', 'R$ 0,00');
   el.type = 'text';
-  el.addEventListener('input', function(e) {
+  el.addEventListener('input', function() {
     let raw = this.value.replace(/\D/g, '');
-    if (!raw) { this.value = ''; return; }
+    if (!raw) { this.value = ''; this.dataset.cents = ''; return; }
     let cents = parseInt(raw, 10);
     let reais = cents / 100;
     this.value = reais.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     this.dataset.cents = cents;
+  });
+}
+
+function setupAllCurrencyInputs() {
+  const ids = ['t-valor','c-limite','g-valor','g-total','g-atual','fx-valor'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) setupCurrencyInput(el);
   });
 }
 
@@ -744,6 +754,7 @@ function getCatColor(cat) {
 
 // ===== ADD TRANSACTION =====
 function showModal(id) {
+  setupAllCurrencyInputs();
   if (id === 'modal-add-transaction') {
     state.editingTxId = null;
     document.getElementById('modal-add-title').textContent = 'Nova Transação';
@@ -1635,6 +1646,10 @@ function toast(msg) {
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); }
 
 // ===== INIT =====
+// Setup currency inputs as soon as DOM is available
+if (typeof document !== 'undefined') {
+  setTimeout(setupAllCurrencyInputs, 0);
+}
 applyRecurrents();
 updateHeader();
 renderPage();
